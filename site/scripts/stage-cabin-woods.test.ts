@@ -41,11 +41,26 @@ async function fixture({reviewClips=false,reviewOnly=false,emptyAssetExtras=fals
 test('selection paths remain relative to the author selection when scene output is maintained elsewhere',async()=>{
   const f=await fixture({separateScene:true});const staged=await stageCabinWoods(f);expect(staged.assets).toHaveLength(1);expect(staged.assets[0].revisionId).toBe(rid);expect(staged.available).toBe(false);
 });
+
+test('saved review sheets never become gallery posters, and public staging requires a separate poster', async () => {
+  const f = await fixture();
+  const preview = await stageCabinWoods(f);
+  expect(preview.assets[0].poster).toBeNull();
+  await expect(stageCabinWoods({ ...f, publication: 'public' })).rejects.toThrow('Missing rig poster');
+});
 test('explicit public staging exposes the approved selection without changing revision bytes',async()=>{
- const f=await fixture(),preview=await stageCabinWoods(f),published=await stageCabinWoods({...f,publication:'public'});
+ const f=await fixture(),preview=await stageCabinWoods(f);
+ const model = preview.assets[0].runtimeModelDownload;
+ const record = { path: 'media/rig/review-neutral-v1/cabin-woods-psx-horror/review-fixture/fixture.png', width: 1024, height: 1024, assetId: aid, revisionId: rid, glb: { bytes: model.bytes, sha256: model.sha256 } };
+ await f.put(join(f.site, 'src/data/rig-posters.json'), JSON.stringify({ posters: { 'cabin-woods-psx-horror:fixture': record } }));
+ const published=await stageCabinWoods({...f,publication:'public'});
  expect(published.available).toBe(true);expect(published.status).toBe('Available');
  expect(published.assets[0].review).toEqual({ownerAccepted:true,status:'accepted'});
  expect(published.assets[0].canonicalDownload.sha256).toBe(preview.assets[0].canonicalDownload.sha256);
+ expect(published.assets[0].poster.inputPath).toBe(record.path);
+ expect((await stageCabinWoods(f)).assets[0].poster).toEqual(published.assets[0].poster);
+ await f.put(join(f.site, 'src/data/rig-posters.json'), JSON.stringify({ posters: { 'cabin-woods-psx-horror:fixture': { ...record, glb: { ...record.glb, sha256: '0'.repeat(64) } } } }));
+ await expect(stageCabinWoods({ ...f, publication: 'public' })).rejects.toThrow('Rig poster model differs');
  const target=join(f.site,'public');
  for(const profile of ['scene','editable']){const download=published.downloads.find((d:{profile:string})=>d.profile===profile),archive=verifyArchive(await readFile(join(target,download.url)));expect(Buffer.from(archive.files['README.txt']).toString()).not.toMatch(/owner approval|approval pending|owner release approval/i);}
  await expect(stageCabinWoods({...f,publication:'typo'})).rejects.toThrow('publication');
@@ -113,7 +128,7 @@ test('frozen source and manifest seals reject coordinated editing-file tampering
   const f=await fixture();const changed=Buffer.from("const meta={name:'tampered'};function build(){return createRoot('Changed');}");const manifest=JSON.parse(await readFile(join(f.saved,'manifest.json'),'utf8'));manifest.files['source.kiln.js']={bytes:changed.length,sha256:'sha256:'+hashBytes(changed)};await writeFile(join(f.saved,'manifest.json'),JSON.stringify(manifest));await writeFile(join(f.saved,'source.kiln.js'),changed);const sidecar=join(f.workspace,'delivery/fixture-runtime.kiln-metadata.json');const metadata=JSON.parse(await readFile(sidecar,'utf8'));metadata.source.sourceSha256='sha256:'+hashBytes(changed);await writeFile(sidecar,JSON.stringify(metadata));await expect(stageCabinWoods(f)).rejects.toThrow('verification failed');
 });
 test('technical nightman selection key delivers only public stone-golem gallery/download names',async()=>{
-  const f=await fixture();await resealRuntime(f,d=>{d.asset.extras.kilnProvenanceV1.metadata.uri='stone-golem.kiln-metadata.json';});const selection=JSON.parse(await readFile(f.selection,'utf8'));selection.assets.nightman={...selection.assets.fixture,name:'Stone Golem'};delete selection.assets.fixture;await writeFile(f.selection,JSON.stringify(selection));await syncSceneRuntime(f);const sealPath=join(f.scene,'stage-manifest.json');const seal=JSON.parse(await readFile(sealPath,'utf8'));seal.selectionSha256=hashBytes(await readFile(f.selection));await writeFile(sealPath,JSON.stringify(seal));const staged=await stageCabinWoods(f);const asset=staged.assets[0];expect(asset.slug).toBe('stone-golem');expect(asset.assetId).toBe(aid);expect(asset.revisionId).toBe(rid);for(const url of [asset.modelPath,asset.poster.src,asset.runtimeDownload.url,asset.editableDownload.url]){expect(url).toContain('stone-golem');expect(url).not.toContain('nightman');}expect(asset.sourcePath).toContain(aid);expect(asset.sourcePath).not.toContain('nightman');
+  const f=await fixture();await resealRuntime(f,d=>{d.asset.extras.kilnProvenanceV1.metadata.uri='stone-golem.kiln-metadata.json';});const selection=JSON.parse(await readFile(f.selection,'utf8'));selection.assets.nightman={...selection.assets.fixture,name:'Stone Golem'};delete selection.assets.fixture;await writeFile(f.selection,JSON.stringify(selection));await syncSceneRuntime(f);const sealPath=join(f.scene,'stage-manifest.json');const seal=JSON.parse(await readFile(sealPath,'utf8'));seal.selectionSha256=hashBytes(await readFile(f.selection));await writeFile(sealPath,JSON.stringify(seal));const staged=await stageCabinWoods(f);const asset=staged.assets[0];expect(asset.slug).toBe('stone-golem');expect(asset.assetId).toBe(aid);expect(asset.revisionId).toBe(rid);for(const url of [asset.modelPath,asset.runtimeDownload.url,asset.editableDownload.url]){expect(url).toContain('stone-golem');expect(url).not.toContain('nightman');}expect(asset.sourcePath).toContain(aid);expect(asset.sourcePath).not.toContain('nightman');
 });
 
 import { main as stageLegacyPacks } from './scene-pack.mjs';

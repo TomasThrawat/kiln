@@ -3,15 +3,15 @@ import { imageSrcsets } from './media-variants.mjs';
 import { RIG_ID } from './rig-render.mjs';
 
 /**
- * The record of posters rendered under the review rig lives in `src/data/rig-posters.json`. The catalog files
- * (`packs/farm.json`, `standalone/golden-gate-bridge.json`, `packs/vehicles.json`) take their `poster` from it,
+ * The record of single-view posters rendered under the review rig lives in `src/data/rig-posters.json`.
+ * Catalog stagers take their public `poster` from it, separately from saved multi-view review sheets,
  * so regenerating a catalog from a delivery cannot silently bring back an image made under an older rig.
  */
 
 /** Where a rig poster is pinned in the asset mirror (and, later, in R2): the rig id is part of the path. */
 export const rigPosterPath = (pack, release, id) => `media/rig/${RIG_ID}/${pack}/${release}/${id}.png`;
 
-/** `pack:id` keys keep the three catalogs in one file. */
+/** `pack:id` keys keep catalog records separate in one file. */
 export const rigPosterKey = (pack, id) => `${pack}:${id}`;
 
 /** The catalog image record for a recorded poster. */
@@ -44,8 +44,17 @@ export function applyRigPoster(asset, record) {
 }
 
 /** Apply the record to a list of assets belonging to one pack (`farm`, `vehicles`) or to a standalone asset. */
-export function applyRigPosters(assets, pack, recorded) {
-  return assets.map((asset) => applyRigPoster(asset, recorded?.posters?.[rigPosterKey(pack, asset.slug)]));
+export function applyRigPosters(assets, pack, recorded, { required = false } = {}) {
+  return assets.map((asset) => {
+    const record = recorded?.posters?.[rigPosterKey(pack, asset.slug)];
+    if (!record && required) throw new Error(`Missing rig poster for ${pack}/${asset.slug}; render it with scripts/rig-posters.mjs ${pack}`);
+    // Cabin delivers a model and a runtime ZIP separately. Bind its image to the model bytes as well as the revision.
+    const model = asset.runtimeModelDownload;
+    if (record && model && (record.assetId !== asset.assetId || record.glb?.sha256 !== model.sha256 || record.glb?.bytes !== model.bytes)) {
+      throw new Error(`Rig poster model differs from delivered asset ${pack}/${asset.slug}; render its poster again`);
+    }
+    return applyRigPoster(asset, record);
+  });
 }
 
 /**

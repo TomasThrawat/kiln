@@ -70,6 +70,22 @@ runtime bundles need a new immutable release identity and matching checksums;
 never overwrite an existing delivery. A build does not confer owner acceptance
 on an asset. Keep its recorded revision, attribution and review status intact.
 
+Gallery posters are single views, separate from saved multi-view review sheets.
+The shared `scripts/rig-posters.mjs` renderer records their exact model hashes,
+revisions, cameras and review rig in `src/data/rig-posters.json`. Staging must
+reuse these records rather than assigning a saved `preview.png` to `poster`.
+For Cabin, stage a preview delivery first, then run:
+
+```sh
+bun scripts/rig-posters.mjs cabin-woods-psx-horror --mirror /path/to/mirror
+node scripts/fetch-mirror.mjs
+```
+
+This renders the staged runtime models, pins the new images and plans responsive
+variants. Public Cabin staging requires a matching poster for every asset and
+preserves the original review sheets and editable downloads. Uploading new mirror
+files and deploying the site remain separate release steps.
+
 ## Deploy
 
 Follow [DEPLOYMENT.md](DEPLOYMENT.md) to qualify an exact build and obtain the

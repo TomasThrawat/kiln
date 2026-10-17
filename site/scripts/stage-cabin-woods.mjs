@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { buildDeliveryArchive, deterministicZip, isSavedMaterialDependency, revisionBundle } from './asset-delivery.mjs';
 import { assetPath, hashBytes, verifyBytes } from './mirror-core.mjs';
+import { applyRigPosters } from './rig-posters-core.mjs';
 
 const ID = 'cabin-woods-psx-horror', BASE = `/asset-demos/${ID}/`;
 const MAX_FILE = 64 * 1024 * 1024, MAX_TOTAL = 512 * 1024 * 1024;
@@ -200,10 +201,12 @@ export async function stageCabinWoods({ workspace, scene, source, selection = re
         materialRecords.set(mkey, material);
       }
     }
-    const editable = revisionBundle(record), metric = metricsOf(canonical, manifest), dimensions = imageOf(files['preview.png']);
+    const editable = revisionBundle(record), metric = metricsOf(canonical, manifest);
+    imageOf(files['preview.png']);
     const entry = { slug, collection: chosen.collection, assetId: manifest.assetId, revisionId: manifest.revisionId, ...(manifest.parentRevision ? { parentRevision: manifest.parentRevision } : {}), includedRevisions: [manifest.revisionId], historyScope: 'selected-only', sourceSha256: hashBytes(files['source.kiln.js']) }; inventory.push(entry);
     const runtimeModelDownload = download(`models/${slug}.glb`, runtime), metadataDownload = download(`models/${slug}.kiln-metadata.json`, metadata), canonicalDownload = download(`canonical/${slug}.glb`, canonical), manifestDownload = download(`metadata/${slug}/manifest.json`, manifestBytes);
     const sourcePath = `source/${identity}/source.kiln.js`; add(sourcePath, files['source.kiln.js']);
+    // Keep the sealed review sheet for existing delivery consumers; it is never a gallery poster.
     const posterPath = `posters/${slug}.png`; add(posterPath, files['preview.png']);
     const editableDownload = download(`downloads/editable/${slug}.zip`, editable);
     const runtimeDownload = download(`downloads/runtime/${slug}.zip`, buildDeliveryArchive({ profile: 'runtime', group: ID, assets: [entry], files: { [`models/${slug}.glb`]: runtime, [`models/${slug}.kiln-metadata.json`]: metadata, 'LICENSE.txt': licence } }));
@@ -213,7 +216,7 @@ export async function stageCabinWoods({ workspace, scene, source, selection = re
     models.push({ id: key, path: runtimeModelDownload.path, collection: chosen.collection, assetId: manifest.assetId, revisionId: manifest.revisionId });
     const fidelity = manifest.preview?.fidelity ?? null;
     if (fidelity?.materialFaithful && fidelity.inputGlbSha256?.replace(/^sha256:/, '') !== hashBytes(canonical)) throw new Error('Saved material-faithful preview names another GLB');
-    assets.push({ slug, name: chosen.name, description: (chosen.description ?? `${chosen.name}, an original Kiln asset.`).replace(/\s*Owner visual review pending\./g, ''), category: chosen.category ?? 'Cabin and woodland', pack: ID, collection: chosen.collection, assetId: manifest.assetId, revisionId: manifest.revisionId, sourceRef: chosen.sourceRef, modelPath: runtimeModelDownload.url, sourcePath: BASE + sourcePath, sourceSha256: entry.sourceSha256, manifestDownload, canonicalDownload, runtimeModelDownload, metadataDownload, runtimeDownload, editableDownload, poster: { src: BASE + posterPath, ...dimensions, alt: `${chosen.name}: exact saved revision preview`, srcsetAvif: '', srcsetWebp: '', fidelity }, metrics: metric, review: { ownerAccepted: published, status: published ? 'accepted' : 'awaiting-owner-review' }, historyScope: 'selected-only' });
+    assets.push({ slug, name: chosen.name, description: (chosen.description ?? `${chosen.name}, an original Kiln asset.`).replace(/\s*Owner visual review pending\./g, ''), category: chosen.category ?? 'Cabin and woodland', pack: ID, collection: chosen.collection, assetId: manifest.assetId, revisionId: manifest.revisionId, sourceRef: chosen.sourceRef, modelPath: runtimeModelDownload.url, sourcePath: BASE + sourcePath, sourceSha256: entry.sourceSha256, manifestDownload, canonicalDownload, runtimeModelDownload, metadataDownload, runtimeDownload, editableDownload, poster: null, metrics: metric, review: { ownerAccepted: published, status: published ? 'accepted' : 'awaiting-owner-review' }, historyScope: 'selected-only' });
   }
   for (const [name, path] of Object.entries(selected.materials ?? {})) {
     if (!/^[a-z0-9-]+$/.test(name)) throw new Error('Invalid standalone material slug');
@@ -260,7 +263,11 @@ export async function stageCabinWoods({ workspace, scene, source, selection = re
     const actual = imageOf(bytes);
     if (actual.width !== poster.width || actual.height !== poster.height) throw new Error('Scene poster dimensions differ from sealed PNG');
   }
-  const catalog = { ...existing, id: ID, name: 'Cabin in the Woods: PSX Horror', base: BASE, release, available: published, status: published ? 'Available' : 'Owner review pending', assetCount: assets.length, assets, textureResources, downloads, runtime: { file: 'web/game.html', sha256: hashBytes(output.get('web/game.html')) } };
+  let recorded;
+  try { recorded = json(await readFile(resolve(site, 'src/data/rig-posters.json'))); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const galleryAssets = applyRigPosters(assets, ID, recorded, { required: published });
+  const catalog = { ...existing, id: ID, name: 'Cabin in the Woods: PSX Horror', base: BASE, release, available: published, status: published ? 'Available' : 'Owner review pending', assetCount: assets.length, assets: galleryAssets, textureResources, downloads, runtime: { file: 'web/game.html', sha256: hashBytes(output.get('web/game.html')) } };
   const pack = { schemaVersion: 1, id: ID, name: catalog.name, release, available: published, status: catalog.status, models, files: [...output].map(([path, b]) => ({ path, bytes: b.length, sha256: hashBytes(b) })), source: { selectionSha256: hashBytes(selectionBytes), sourceManifestSha256: hashBytes(sourceSealBytes), historyScope: 'selected-only', assets: inventory } };
   // Existing lightweight records are immutable. Detect conflicts before writing any delivery.
   for (const [path, bytes] of lightweight) { try { const prior = await readFile(resolve(sourceRoot, ID, safe(path))); if (!prior.equals(bytes)) throw new Error(`Existing source record conflict: ${path}`); } catch (e) { if (e.code !== 'ENOENT') throw e; } }

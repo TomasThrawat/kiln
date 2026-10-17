@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import { inspectGlb } from './generate-commons.mjs';
 import { BRIDGE_CAPTURES, BRIDGE_ID, bridgeCaptureKey, bridgeCapturePath, cameraFromCaptureFile } from './bridge-captures.mjs';
 import { pinMirrorFile, readJson, upsertBy, writeJson } from './media-pins.mjs';
-import { verifyArchive, verifyBytes } from './mirror-core.mjs';
+import { assetPath, verifyArchive, verifyBytes } from './mirror-core.mjs';
 import { RIG_ID, connectRig, fitCamera, orbitDirection, sha256Of } from './rig-render.mjs';
 import { applyRigPosters, rigPosterImage, rigPosterKey, rigPosterPath } from './rig-posters-core.mjs';
 import { FOUNDRY_FLOOR_ID, FOUNDRY_FLOOR_POSTER, FOUNDRY_FLOOR_SCENE_POSTER } from './foundry-floor-spec.mjs';
@@ -18,6 +18,7 @@ import { FOUNDRY_FLOOR_ID, FOUNDRY_FLOOR_POSTER, FOUNDRY_FLOOR_SCENE_POSTER } fr
  *   bun scripts/rig-posters.mjs vehicles --service ... --mirror C:/.../mirror [--only sedan,suv] [--out DIR]
  *   bun scripts/rig-posters.mjs foundry-floor --service ... --mirror C:/.../mirror [--only foup,scene-poster] [--out DIR]
  *   bun scripts/rig-posters.mjs hero --service ... --mirror ... --outputs DIR [--out DIR]
+ *   bun scripts/rig-posters.mjs cabin-woods-psx-horror --service ... --mirror ... [--out DIR]
  *
  * Each GLB is read from its sealed source (a delivery archive in the mirror, or the bridge author's export) and
  * verified against the catalog's SHA-256 before it is sent to the renderer. An image is the engine's own view of
@@ -30,6 +31,21 @@ import { FOUNDRY_FLOOR_ID, FOUNDRY_FLOOR_POSTER, FOUNDRY_FLOOR_SCENE_POSTER } fr
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = join(SITE, 'src/data');
 export const FARM_POSTER = { width: 1024, height: 1024, direction: [0.7, 0.5, 0.7], padding: 1.05 };
+export const CABIN_WOODS_ID = 'cabin-woods-psx-horror';
+export const CABIN_WOODS_POSTER = FARM_POSTER;
+
+/** Cabin's staged runtime models are sealed separately from its ZIPs and saved review sheets. */
+export async function cabinWoodsTargets({ publicDir = join(SITE, 'public'), data = DATA } = {}) {
+  const catalog = await readJson(join(data, `${CABIN_WOODS_ID}.json`));
+  return Promise.all(catalog.assets.map(async (asset) => {
+    const download = asset.runtimeModelDownload;
+    const path = assetPath(download.url.replace(/^\//, ''));
+    if (!path.startsWith(`asset-demos/${CABIN_WOODS_ID}/models/`)) throw new Error(`Unexpected Cabin model path: ${path}`);
+    const glb = await readFile(join(publicDir, path));
+    verifyBytes(glb, download, asset.slug);
+    return { pack: CABIN_WOODS_ID, release: catalog.release, slug: asset.slug, name: asset.name, revisionId: asset.revisionId, assetId: asset.assetId, alt: asset.description, glb, glbPath: download.url, view: CABIN_WOODS_POSTER };
+  }));
+}
 /**
  * Every vehicle is seen from the same place so the cards line up: from the front right (the +X, +Z side), 20
  * degrees above the horizon, in a square frame. The GLB is the delivered file; a viewer that ignores MSFT_lod
@@ -264,7 +280,10 @@ export async function pruneImagePlan({ data = DATA } = {}) {
 export async function refreshCatalog({ file, pack, data = DATA }) {
   const recorded = await readJson(join(data, 'rig-posters.json'));
   const catalog = await readJson(file);
-  if (Array.isArray(catalog.assets)) catalog.assets = applyRigPosters(catalog.assets, pack, recorded);
+  if (Array.isArray(catalog.assets)) {
+    if (pack === CABIN_WOODS_ID) catalog.assets = catalog.assets.map((asset) => ({ ...asset, poster: null }));
+    catalog.assets = applyRigPosters(catalog.assets, pack, recorded, { required: pack === CABIN_WOODS_ID });
+  }
   await writeJson(file, catalog);
   return catalog;
 }
@@ -273,7 +292,7 @@ async function main(argv = process.argv.slice(2), env = process.env) {
   const option = (flag, fallback) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : fallback);
   const pack = argv[0];
   const mirror = option('--mirror', env.KILN_ASSET_MIRROR);
-  if (!['farm', 'bridge', 'vehicles', FOUNDRY_FLOOR_ID, HERO_PACK].includes(pack) || !mirror) throw new Error('Usage: bun scripts/rig-posters.mjs farm|bridge|vehicles|foundry-floor|hero --mirror DIR [--service URL] [--engine DIR] [--only a,b] [--out DIR] [--dry]  (bridge also needs --outputs DIR --cameras DIR; hero needs --outputs DIR)');
+  if (!['farm', 'bridge', 'vehicles', FOUNDRY_FLOOR_ID, HERO_PACK, CABIN_WOODS_ID].includes(pack) || !mirror) throw new Error('Usage: bun scripts/rig-posters.mjs farm|bridge|vehicles|foundry-floor|hero|cabin-woods-psx-horror --mirror DIR [--service URL] [--engine DIR] [--only a,b] [--out DIR] [--dry]  (bridge also needs --outputs DIR --cameras DIR; hero needs --outputs DIR)');
   const only = option('--only')?.split(',');
   const rig = await connectRig({ url: option('--service', env.KILN_RENDER_SERVICE_URL), engineDir: option('--engine') });
   console.log(`Rig ${RIG_ID} on ${rig.service.rendererId}; engine ${rig.engine.provenance.commit.slice(0, 7)} (${rig.engine.provenance.subject})${rig.engine.provenance.dirty ? ' with local changes' : ''}`);
@@ -287,6 +306,8 @@ async function main(argv = process.argv.slice(2), env = process.env) {
     const outputs = option('--outputs');
     if (!outputs) throw new Error('The hero needs --outputs (the bridge author export folder)');
     targets = await heroTargets({ outputs: resolve(outputs), tiers: await readJson(join(DATA, 'standalone/golden-gate-tiers.json')), recorded: await readJson(join(DATA, 'rig-posters.json')) });
+  } else if (pack === CABIN_WOODS_ID) {
+    targets = (await cabinWoodsTargets()).filter((target) => !only || only.includes(target.slug));
   } else if (pack === 'vehicles') {
     targets = (await vehicleTargets({ mirror })).filter((target) => !only || only.includes(target.slug));
   } else if (pack === FOUNDRY_FLOOR_ID) {
@@ -311,10 +332,13 @@ async function main(argv = process.argv.slice(2), env = process.env) {
   if (pack === HERO_PACK) {
     console.log('Pinned the hero poster; scripts/build-hero.mjs writes the hero data from it.');
   } else if (pack !== 'bridge') {
-    await refreshCatalog({ file: join(DATA, `packs/${pack}.json`), pack });
+    await refreshCatalog({ file: join(DATA, pack === CABIN_WOODS_ID ? `${pack}.json` : `packs/${pack}.json`), pack });
     if (pack === FOUNDRY_FLOOR_ID && (await recordFoundryFloorScenePoster({ posters }))) console.log('Recorded the scene page poster in scene-media.json.');
-    const dropped = await pruneImagePlan();
-    if (dropped.length) console.log(`Dropped ${dropped.length} replaced images from the build plan (their mirror pins stay).`);
+    // Cabin's saved sheets were direct delivery URLs, so no prior planned images need pruning.
+    if (pack !== CABIN_WOODS_ID) {
+      const dropped = await pruneImagePlan();
+      if (dropped.length) console.log(`Dropped ${dropped.length} replaced images from the build plan (their mirror pins stay).`);
+    }
   } else {
     console.log('The bridge update (scripts/generate-commons.mjs --only-bridge) pins these images and applies the record.');
   }
