@@ -398,7 +398,7 @@ Output is experimental, has no UVs, and records resolution and evaluation counts
 
 `arrayLinear` and `arrayRadial` require integer counts from 1 to 10,000, including the existing source; their return value contains `count - 1` new meshes. Count 1 returns no copies. Frames, offsets/centers, and all resulting positions must be finite, with rejection before attaching any copies. Resources remain shared and these helpers do not batch draw calls.
 
-`repeatAlongCurve(source, points, { count, ... })` places `count` copies along a sampled curve, evenly spaced by arc length between `start` and `end` (fractions of its length). Each copy's local +X follows the tangent of the segment it sits on (the outgoing segment at a sample point) and local +Y points toward `up`, default `[0,1,0]`, made perpendicular to the tangent. `scale` and `twist` are constant or interpolated from attachment to tip; `opposite: true` adds a copy twisted a further 180 degrees at each position. With the default `merge: true` it returns one BufferGeometry: every source attribute is copied per copy, UVs unchanged, positions, normals and tangents transformed, material groups and morph targets not copied, and `along: true` adds a float `_along` attribute from 0 on the first copy to 1 on the last (the default `legacy` GLB converter does not yet export author underscore attributes, so `_along` is available in source but not in the saved GLB; see [#195](https://github.com/instruktlabs/kiln/issues/195)). A merge larger than 262,144 vertices fails before allocating. With `merge: false` it returns shared-geometry mesh nodes, like `arrayLinear`, and does not move the source.
+`repeatAlongCurve(source, points, { count, ... })` places `count` copies along a sampled curve, evenly spaced by arc length between `start` and `end` (fractions of its length). Each copy's local +X follows the tangent of the segment it sits on (the outgoing segment at a sample point) and local +Y points toward `up`, default `[0,1,0]`, made perpendicular to the tangent. `scale` and `twist` are constant or interpolated from attachment to tip; `opposite: true` adds a copy twisted a further 180 degrees at each position. With the default `merge: true` it returns one BufferGeometry: every source attribute is copied per copy, UVs unchanged, positions, normals and tangents transformed, material groups and morph targets not copied, and `along: true` adds a float `_along` attribute from 0 on the first copy to 1 on the last, which both GLB converters export as `_ALONG`. A merge larger than 262,144 vertices fails before allocating. With `merge: false` it returns shared-geometry mesh nodes, like `arrayLinear`, and does not move the source.
 
 These are per-operation compute limits for every asset. Choose a coarser sampling/subdivision or deliberately split large work; no asset category selects a different budget.
 
@@ -444,6 +444,37 @@ input). Call it after every occluding part is attached. Each mesh gets its own
 geometry copy, because cavity depends on placement. The bake is deterministic and
 bounded by `GEOMETRY_ALLOCATION_LIMITS`; see the [delivery contract](delivery-contract.md#baked-vertex-attributes)
 for the formulas.
+
+## Carry vertex colours and author masks
+
+Export keeps these vertex attributes; anything else is reported as
+`EXPORT_ATTRIBUTE_UNSUPPORTED` (or rejected under `geometryPolicy: 'strict'`):
+
+| three.js attribute | glTF attribute | `legacy` (default) | `three` |
+| --- | --- | --- | --- |
+| `position`, `normal`, `uv`, `tangent` | `POSITION`, `NORMAL`, `TEXCOORD_0`, `TANGENT` | yes | yes |
+| `color` (3 or 4 components) | `COLOR_0` | yes | yes |
+| `_edge`, `_cavity` (baked) | `_EDGE`, `_CAVITY` | yes | yes |
+| lowercase `_name`, 1 to 4 float components | `_NAME` | yes | yes |
+| `uv1` | `TEXCOORD_1` | yes | yes |
+| `uv2`, `uv3` | `TEXCOORD_2`, `TEXCOORD_3` | no | yes |
+| `skinIndex`, `skinWeight` | `JOINTS_0`, `WEIGHTS_0` | no | yes |
+
+A texture with `channel = 1` (for example a baked `aoMap`) samples `uv1` (`TEXCOORD_1`); export
+refuses it when the mesh has no `uv1`, and reports channels a converter does not write.
+
+An author attribute name is an underscore, a lowercase letter, then lowercase
+letters, digits or single underscores (at most 64 characters), such as `_wet` or
+`_flow_dir`. It is written as 32-bit floats under the uppercase name, and three.js
+`GLTFLoader` reads it back under the lowercase one. Use it for a per-vertex mask
+such as a wet line or wear instead of cutting triangles along the boundary.
+`runtime --target three` keeps author attributes as unquantized 32-bit floats and lists
+them in the sidecar `customAttributes`. Mixed-case names such as `_Wet` would not
+round-trip and stay unsupported.
+
+glTF multiplies base colour by `COLOR_0`, and loaders enable vertex colours when it
+is present, whether or not the authoring material set `vertexColors`. Remove a
+`color` attribute that is not meant to tint the surface.
 
 ## Declare a triangle budget
 

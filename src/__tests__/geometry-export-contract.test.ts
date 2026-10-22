@@ -63,6 +63,75 @@ describe('custom mesh export contract', () => {
     );
   });
 
+  for (const gltfExporter of ['legacy', 'three'] as const)
+    it(`${gltfExporter} writes vertex colours and lowercase underscore author attributes`, async () => {
+      const { root, geometry } = fixture();
+      const color = [1, 0, 0, 1, 0, 1, 0, 0.5, 0, 0, 1, 0.25];
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(color, 4));
+      geometry.setAttribute('_wet', new THREE.Float32BufferAttribute([0, 1, 1], 1));
+      geometry.setAttribute('_flow_dir', new THREE.Float32BufferAttribute([1, 0, 0, 1, 1, 1], 2));
+      geometry.setAttribute('uv1', new THREE.Float32BufferAttribute([0.5, 0, 1, 0.5, 0, 1], 2));
+      const result = await renderSceneToGLB(root, {
+        dedup: false,
+        optimize: 'off',
+        instance: 'off',
+        gltfExporter,
+      });
+      expect(result.warnings.join('\n')).not.toContain('EXPORT_ATTRIBUTE_UNSUPPORTED');
+      const doc = await new WebIO().readBinary(result.bytes);
+      const primitive = doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!;
+      const values = (semantic: string) => {
+        const accessor = primitive.getAttribute(semantic);
+        if (!accessor) throw new Error(`missing ${semantic}`);
+        return { type: accessor.getType(), values: Array.from(accessor.getArray()!) };
+      };
+      expect(values('COLOR_0')).toEqual({ type: 'VEC4', values: color });
+      expect(values('_WET')).toEqual({ type: 'SCALAR', values: [0, 1, 1] });
+      expect(values('_FLOW_DIR')).toEqual({ type: 'VEC2', values: [1, 0, 0, 1, 1, 1] });
+      expect(values('TEXCOORD_1')).toEqual({ type: 'VEC2', values: [0.5, 0, 1, 0.5, 0, 1] });
+    });
+
+  it('legacy samples a channel-1 occlusion map through TEXCOORD_1', async () => {
+    const { root, geometry } = fixture();
+    const mesh = root.children[0] as THREE.Mesh;
+    const ao = new THREE.DataTexture(new Uint8Array([200, 200, 200, 255]), 1, 1);
+    ao.needsUpdate = true;
+    ao.channel = 1;
+    (mesh.material as THREE.MeshStandardMaterial).aoMap = ao;
+    // Pinned: CI also runs the suite with KILN_GLTF_EXPORTER=three, which names the set uv2.
+    const legacy = { gltfExporter: 'legacy' } as const;
+    await expect(renderSceneToGLB(root, legacy)).rejects.toThrow(
+      'CustomPanel: aoMap samples uv1, which the geometry lacks.',
+    );
+    geometry.setAttribute('uv1', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
+    const result = await renderSceneToGLB(root, {
+      ...legacy,
+      dedup: false,
+      optimize: 'off',
+      instance: 'off',
+    });
+    const doc = await new WebIO().readBinary(result.bytes);
+    expect(doc.getRoot().listMaterials()[0]!.getOcclusionTextureInfo()!.getTexCoord()).toBe(1);
+    ao.channel = 2;
+    expect((await renderSceneToGLB(root, legacy)).warnings).toContain(
+      'EXPORT_ATTRIBUTE_UNSUPPORTED CustomPanel: aoMap UV channel 2 is not preserved by the GLB bridge.',
+    );
+  });
+
+  it('names author attributes that cannot round-trip through GLTFLoader', async () => {
+    const { root, geometry } = fixture();
+    geometry.setAttribute('_Wet', new THREE.Float32BufferAttribute([0, 1, 1], 1));
+    const result = await renderSceneToGLB(root);
+    expect(result.warnings).toContain(
+      'EXPORT_ATTRIBUTE_UNSUPPORTED CustomPanel: _Wet is not preserved by the GLB bridge. Author attributes use a lowercase name such as _wet (exported as _WET) with 1 to 4 float components.',
+    );
+    geometry.deleteAttribute('_Wet');
+    geometry.setAttribute('_wet', new THREE.Float32BufferAttribute(new Array(15).fill(0), 5));
+    await expect(renderSceneToGLB(root)).rejects.toThrow(
+      'CustomPanel: _wet requires 3 vertices with 1 or 2 or 3 or 4 components each.',
+    );
+  });
+
   it('rejects nonfinite positions before writing invalid bytes', async () => {
     const { root, geometry } = fixture();
     geometry.getAttribute('position').setX(0, Number.NaN);

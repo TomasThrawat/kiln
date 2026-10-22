@@ -1,11 +1,13 @@
 import type * as THREE from 'three';
 
 export type GeometryExportPolicy = 'warn' | 'strict';
-export const EXPORTED_GEOMETRY_ATTRIBUTES: Readonly<Record<string, number>> = {
+export const EXPORTED_GEOMETRY_ATTRIBUTES: Readonly<Record<string, number | readonly number[]>> = {
   position: 3,
   normal: 3,
   uv: 2,
+  uv1: 2,
   tangent: 4,
+  color: [3, 4],
   // Delivery contract custom attributes (bakeSurfaceAttributes), written as _EDGE/_CAVITY.
   _edge: 1,
   _cavity: 1,
@@ -17,10 +19,33 @@ export const CUSTOM_EXPORT_ATTRIBUTES: Readonly<Record<string, string>> = {
   _cavity: '_CAVITY',
 };
 
+/**
+ * Author attributes: a lowercase three.js name such as `_wet` is written by both converters as a
+ * float glTF attribute `_WET`, which GLTFLoader reads back as `_wet`. Other names would not
+ * round-trip, so they stay unsupported.
+ */
+export const AUTHOR_ATTRIBUTE_PATTERN = /^_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
+export const AUTHOR_ATTRIBUTE_COMPONENTS: readonly number[] = [1, 2, 3, 4];
+const AUTHOR_ATTRIBUTE_MAX_NAME = 64;
+
+/** glTF semantic for a three.js custom attribute name, or null when it is not one. */
+export function customAttributeSemantic(key: string): string | null {
+  if (key.length > AUTHOR_ATTRIBUTE_MAX_NAME || !AUTHOR_ATTRIBUTE_PATTERN.test(key)) return null;
+  return CUSTOM_EXPORT_ATTRIBUTES[key] ?? key.toUpperCase();
+}
+
+/** Material texture slots whose UV channel export must preserve. */
+const TEXTURE_SLOTS = [
+  'map',
+  'normalMap',
+  'roughnessMap',
+  'metalnessMap',
+  'aoMap',
+  'emissiveMap',
+] as const;
+
 const THREE_GEOMETRY_ATTRIBUTES = {
   ...EXPORTED_GEOMETRY_ATTRIBUTES,
-  color: [3, 4],
-  uv1: 2,
   uv2: 2,
   uv3: 2,
   skinIndex: 4,
@@ -138,17 +163,23 @@ export function inspectGeometryExport(
     if (!mesh.isMesh) return;
     const geometry = mesh.geometry;
     const name = mesh.name || '<unnamed mesh>';
-    const unsupported = (feature: string) => {
-      const message = `EXPORT_ATTRIBUTE_UNSUPPORTED ${name}: ${feature} is not preserved by the GLB bridge.`;
+    const unsupported = (feature: string, hint = '') => {
+      const message = `EXPORT_ATTRIBUTE_UNSUPPORTED ${name}: ${feature} is not preserved by the GLB bridge.${hint}`;
       if (policy === 'strict') throw new TypeError(message);
       warnings.push(message);
     };
     const position = geometry.getAttribute('position');
     if (position?.itemSize !== 3) throw new TypeError(`${name}: position requires xyz vertices.`);
     for (const [key, attribute] of Object.entries(geometry.attributes)) {
-      const expected = attributes[key];
+      const expected =
+        attributes[key] ?? (customAttributeSemantic(key) ? AUTHOR_ATTRIBUTE_COMPONENTS : undefined);
       if (expected === undefined) {
-        unsupported(key);
+        unsupported(
+          key,
+          key.startsWith('_')
+            ? ' Author attributes use a lowercase name such as _wet (exported as _WET) with 1 to 4 float components.'
+            : '',
+        );
         continue;
       }
       const sizes = typeof expected === 'number' ? [expected] : expected;
@@ -173,6 +204,20 @@ export function inspectGeometryExport(
         const value = index.getX(i);
         if (!Number.isInteger(value) || value < 0 || value >= position.count)
           throw new TypeError(`${name}: index ${i} is outside the position attribute.`);
+      }
+    }
+    // A texture's UV channel must reach the GLB, or it would silently sample UV0.
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      for (const slot of TEXTURE_SLOTS) {
+        const texture = (material as unknown as Record<string, THREE.Texture | null | undefined>)[
+          slot
+        ];
+        const channel = texture?.isTexture ? (texture.channel ?? 0) : 0;
+        if (channel === 0) continue;
+        const uv = `uv${channel}`;
+        if (attributes[uv] === undefined) unsupported(`${slot} UV channel ${channel}`);
+        else if (!geometry.getAttribute(uv))
+          throw new TypeError(`${name}: ${slot} samples ${uv}, which the geometry lacks.`);
       }
     }
     if (exporter === 'three' && Array.isArray(mesh.material))
