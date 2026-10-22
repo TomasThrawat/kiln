@@ -31,7 +31,7 @@ function authoringDiagnosticAdvice(diagnostic) {
   if (diagnostic === "TEXTURE_ATLAS_CONTRACT")
     return 'textureAtlas requires bounded named integer content rectangles with nonoverlapping gutter allocations, matching source crops and usage, and explicit portable sampling. Sources are V3 recipes or exact host-injected library map pins. Split atlases exceeding aggregate work or allocation budgets. remapUVToAtlas requires finite unit UV0, a named content region, inputOrigin and mapping mode; it preserves topology and does not unwrap or tile a region. Read kiln_discover ids ["textureAtlas", "remapUVToAtlas"] for the exact contracts.';
   if (diagnostic === "PROCEDURAL_TEXTURE_V3_CONTRACT")
-    return 'proceduralTexture schemaVersion 3 requires bounded JSON: width/height 4..1024, byte RGBA, integer pixel shapes and at most 64 operations. Palette/dither and seeded stamps support only albedo/emissive. Work includes polygon edges and periodic copies. Read kiln_discover ids ["proceduralTexture"] for the V3 contract; keep schemaVersion 2 for existing opaque patterns.';
+    return 'proceduralTexture schemaVersion 3 requires bounded JSON: width/height 4..1024, byte RGBA, integer pixel shapes and at most 64 operations. Palette/dither supports only albedo/emissive; seeded stamps accept every usage. Work includes polygon edges and periodic copies. Read kiln_discover ids ["proceduralTexture"] for the V3 contract; keep schemaVersion 2 for existing opaque patterns.';
   if (diagnostic === "BONE_CHAIN_ARGUMENT")
     return 'createBoneChain requires 1..1024 valid local joint descriptors with unique roles and animation-safe names across the parent hierarchy. Use normalized perpendicular forward/bend axes and finite rest transforms; an explicit parentRole must match the declared parent. Read the retained source and kiln_discover ids ["createBoneChain"] for the exact contract.';
   if (diagnostic === "SKIN_BINDING_ARGUMENT")
@@ -4270,8 +4270,6 @@ function admitProceduralTextureSpecV3(input) {
       return { op: "paint", ...paint };
     }
     record5(op, ["op", "shape", "rgba", "opacity", "count", "seed", "area", "periodic"], path);
-    if (!colorUsage)
-      fail("stamps are supported only for color usages albedo and emissive.");
     const count = integer2(op["count"], 1, MAX_PROCEDURAL_V3_STAMPS, `${path}.count`);
     const periodic = boolean(op["periodic"], `${path}.periodic`);
     const [bx0, by0, bx1, by1] = proceduralShapeBoundsV3(s);
@@ -30901,8 +30899,8 @@ function validateMaterialManifestAny(value) {
       if (recipe.kind === "procedural") {
         const spec = recipe.spec;
         if (spec.schemaVersion === 3) {
-          if (recipe.compilerId !== PROCEDURAL_TEXTURE_V3_COMPILER_ID || recipe.derive || spec.width !== map.width || spec.height !== map.height)
-            throw Error("V3 compiler/dimensions/derivation mismatch");
+          if (recipe.compilerId !== PROCEDURAL_TEXTURE_V3_COMPILER_ID || spec.width !== map.width || spec.height !== map.height)
+            throw Error("V3 compiler/dimensions mismatch");
         } else if (recipe.compilerId !== "kiln.procedural-texture.v2" || spec.size !== map.width || map.width !== map.height || canonicalMaterialJson(spec) !== canonicalMaterialJson(canonicalizeProceduralTextureSpecV2(spec)))
           throw Error("V2 compiler/canonical recipe dimensions mismatch");
         if (spec.usage !== map.usage || recipe.pixelHash !== map.pixelHash || recipe.derive && map.slot !== "normal")
@@ -31259,14 +31257,13 @@ function snapshot(record) {
     files: Object.fromEntries(Object.entries(record.files).map(([name, bytes]) => [name, Uint8Array.from(bytes)]))
   };
 }
-function materialPixels(spec, derive) {
-  const compiled = compileProceduralTextureSpecV2(spec);
+function derivedNormalPixels(compiled, size, derive) {
   if (!derive)
     return compiled;
   materialNormalDerivationSchema.parse(derive);
-  if (compiled.spec.usage !== "normal")
+  if (size.usage !== "normal")
     throw new Error("Height derivation requires a normal map slot");
-  const height = new DataTexture4(compiled.pixels, compiled.spec.size, compiled.spec.size);
+  const height = new DataTexture4(compiled.pixels, size.width, size.height);
   const normal = normalMapFromHeight(height, { strength: derive.strength });
   if (!(normal.image.data instanceof Uint8Array))
     throw new Error("Normal derivation must produce RGBA8 pixels");
@@ -31274,6 +31271,15 @@ function materialPixels(spec, derive) {
   height.dispose();
   normal.dispose();
   return { ...compiled, pixels };
+}
+function materialPixels(spec, derive) {
+  const compiled = compileProceduralTextureSpecV2(spec);
+  const { size, usage } = compiled.spec;
+  return derivedNormalPixels(compiled, { width: size, height: size, usage }, derive);
+}
+function materialPixelsV3(spec, derive) {
+  const compiled = compileProceduralTextureSpecV3(spec);
+  return derivedNormalPixels(compiled, compiled.spec, derive);
 }
 async function verifyMaterialRecordV1(record) {
   const manifest = validateMaterialRecordShape(record);
@@ -31625,7 +31631,7 @@ async function verifyMaterialRecordContents(record, options) {
       if (canonicalMaterialJson(compiled.manifest) !== canonicalMaterialJson(recipe.manifest) || digest(compiled.pixels) !== map.pixelHash)
         throw new Error("Atlas recipe/manifest/pixel hash mismatch");
     } else {
-      const compiled = recipe.spec.schemaVersion === 3 ? compileProceduralTextureSpecV3(recipe.spec) : materialPixels(recipe.spec, recipe.derive);
+      const compiled = recipe.spec.schemaVersion === 3 ? materialPixelsV3(recipe.spec, recipe.derive) : materialPixels(recipe.spec, recipe.derive);
       if (compiled.recipeHash !== recipe.recipeHash || digest(compiled.pixels) !== recipe.pixelHash)
         throw new Error("Procedural recipe/pixel hash mismatch");
     }
@@ -31639,9 +31645,10 @@ function admitMaterialManifestRecipes(manifest, resources) {
     if (recipe?.kind === "procedural") {
       if (recipe.spec.schemaVersion === 3) {
         const a = admitProceduralTextureSpecV3(recipe.spec);
+        const derived = normalDerivationBudget(recipe.derive ? a.spec.width * a.spec.height : 0);
         texels += a.spec.width * a.spec.height;
-        work += a.estimatedWorkUnits;
-        allocation += a.conservativePixelAllocationBytes;
+        work += a.estimatedWorkUnits + derived.work;
+        allocation += a.conservativePixelAllocationBytes + derived.allocation;
       } else {
         texels += recipe.spec.size ** 2;
         work += recipe.spec.size ** 2 * recipe.spec.layers.length * 16;
@@ -31754,7 +31761,7 @@ async function decodeMaterialLibraryPayload(value) {
   const result = new Map(admitted.map((r) => [identity(r.manifest), r]));
   return wires.map((w) => result.get(identity(w.manifest)));
 }
-var digest = (bytes) => `sha256:${createHash6("sha256").update(bytes).digest("hex")}`, encoder, identity = (manifest) => `${manifest.materialId}/${manifest.revisionId}`;
+var digest = (bytes) => `sha256:${createHash6("sha256").update(bytes).digest("hex")}`, encoder, normalDerivationBudget = (texels) => ({ work: texels * 16, allocation: texels * 8 }), identity = (manifest) => `${manifest.materialId}/${manifest.revisionId}`;
 var init_material_library_node = __esm(() => {
   init_atomic_directory();
   init_material_library();

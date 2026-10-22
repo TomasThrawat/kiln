@@ -15,7 +15,9 @@ import {
   type MaterialRecord,
 } from './material-library';
 import type { PortableSamplerV1 } from './portable-sampler';
-import type { DataTexture } from 'three';
+import { DataTexture } from 'three';
+import { normalMapFromHeight } from './procedural-texture';
+import { compileProceduralTextureSpecV3 } from './procedural-texture-v3';
 import {
   createMaterialRecordV1,
   createMaterialRecordV2,
@@ -437,16 +439,8 @@ const toolError = (schema: z.ZodType, value: unknown): string => {
   expect(parsed.success).toBe(false);
   return describeInputError('kiln_material', parsed.error)!;
 };
-const stamps = {
-  op: 'stamps',
-  shape: { kind: 'rectangle', x: 0, y: 0, width: 1, height: 1 },
-  rgba: [1, 2, 3, 255],
-  opacity: 1,
-  count: 2,
-  seed: 1,
-  area: { x: 0, y: 0, width: 8, height: 4 },
-  periodic: false,
-};
+// V3 stamps accept every usage since #205; a palette is still limited to colour usages.
+const palette = { colors: [0x102030], dither: 'none' };
 const withMap = (map: Record<string, unknown>) => {
   const value = draft() as Record<string, unknown> & { maps: Record<string, unknown>[] };
   value.maps = [{ ...value.maps[0]!, ...map }];
@@ -455,10 +449,10 @@ const withMap = (map: Record<string, unknown>) => {
 test('draft V3 recipe errors name the canonicalizer rule instead of Invalid input', () => {
   const message = toolError(
     proceduralMaterialDraftV2Schema,
-    withMap({ procedural: { ...recipe, usage: 'normal', operations: [stamps] } }),
+    withMap({ procedural: { ...recipe, usage: 'normal', palette } }),
   );
   expect(message).toContain(
-    'maps.0.procedural: proceduralTexture V3: stamps are supported only for color usages albedo and emissive',
+    'maps.0.procedural: proceduralTexture V3: palette and dither are supported only for color usages albedo and emissive',
   );
   expect(message).not.toContain('Invalid input');
 });
@@ -509,10 +503,10 @@ test('stored V3 and atlas recipe errors carry the canonicalizer reason', async (
   const v3 = (await createMaterialRecordV2(draft())).manifest;
   const spec = structuredClone(v3);
   const procedural = spec.maps[0]!.recipe as { spec: Record<string, unknown> };
-  procedural.spec = { ...procedural.spec, usage: 'normal', operations: [stamps] };
+  procedural.spec = { ...procedural.spec, usage: 'normal', palette };
   const v3Message = toolError(materialManifestV2Schema, spec);
   expect(v3Message).toContain(
-    'maps.0.recipe.spec: proceduralTexture V3: stamps are supported only for color usages albedo and emissive',
+    'maps.0.recipe.spec: proceduralTexture V3: palette and dither are supported only for color usages albedo and emissive',
   );
   expect(v3Message).not.toContain('Invalid input');
 
@@ -545,4 +539,123 @@ test('stored V3 and atlas recipe errors carry the canonicalizer reason', async (
   const layoutMessage = toolError(materialManifestV2Schema, layout);
   expect(layoutMessage).toContain('maps.0.recipe: stored atlas manifest: ');
   expect(layoutMessage).not.toMatch(/stored atlas manifest\.?(;|$| Check)/);
+});
+
+const heightSource = {
+  schemaVersion: 3,
+  width: 8,
+  height: 8,
+  usage: 'normal',
+  background: [200, 200, 200, 255],
+  operations: [
+    {
+      op: 'paint',
+      shape: { kind: 'ellipse', x: 2, y: 2, width: 4, height: 4 },
+      rgba: [40, 40, 40, 255],
+    },
+  ],
+} as const;
+const derivedDraft = (map: Record<string, unknown>) => ({
+  schemaVersion: 2,
+  materialId: 'pitted',
+  name: 'Pitted',
+  tileable: true,
+  sources: [structuredClone(source)],
+  maps: [{ slot: 'normal', sourceId: 'authored', transforms: [], sampler, ...map }],
+});
+test('V3 height derives a normal map that verifies and round-trips through a payload', async () => {
+  const derive = { kind: 'normal-from-height', strength: 4 } as const;
+  const record = await createMaterialRecordV2(
+    derivedDraft({ procedural: structuredClone(heightSource), derive }),
+  );
+  const compiled = compileProceduralTextureSpecV3(heightSource);
+  const height = new DataTexture(compiled.pixels, 8, 8);
+  const normal = normalMapFromHeight(height, { strength: 4 });
+  const map = record.manifest.maps[0]!;
+  expect(map.pixelHash).toBe(hash(normal.image.data as Uint8Array));
+  expect(map.pixelHash).not.toBe(hash(compiled.pixels));
+  expect(map.recipe).toMatchObject({ kind: 'procedural', recipeHash: compiled.recipeHash, derive });
+  await verifyMaterialRecord(record);
+  const read = await decodeMaterialLibraryPayload(await createMaterialLibraryPayload([record]));
+  expect(read[0]).toEqual(record);
+  const tampered = structuredClone(record);
+  (tampered.manifest.maps[0]!.recipe as { derive: { strength: number } }).derive.strength = 2;
+  const { revisionId: _, ...content } = tampered.manifest;
+  tampered.manifest.revisionId = hash(
+    canonicalMaterialJson(content),
+  ) as typeof tampered.manifest.revisionId;
+  await expect(verifyMaterialRecord(tampered)).rejects.toThrow(/pixel|recipe/);
+});
+test('normal derivation still requires a normal slot and refuses atlas sources', async () => {
+  await expect(
+    createMaterialRecordV2({
+      ...draft(),
+      maps: [
+        {
+          ...draft().maps[0]!,
+          derive: { kind: 'normal-from-height', strength: 2 },
+        },
+      ],
+    }),
+  ).rejects.toThrow(/normal map slot|usage/);
+  await expect(
+    createMaterialRecordV2(
+      derivedDraft({
+        procedural: { ...structuredClone(heightSource), usage: 'albedo' },
+        derive: { kind: 'normal-from-height', strength: 2 },
+      }),
+    ),
+  ).rejects.toThrow(/usage/);
+  const child = await createMaterialRecordV2(draft());
+  const atlas = atlasDraft(child);
+  await expect(
+    createMaterialRecordV2(
+      {
+        ...atlas,
+        maps: [{ ...atlas.maps[0]!, derive: { kind: 'normal-from-height', strength: 2 } }],
+      },
+      { materials: [child] },
+    ),
+  ).rejects.toThrow(/Atlas derivation unsupported/);
+});
+test('V2 normal derivation keeps its recorded identities', async () => {
+  const record = await createMaterialRecordV2(
+    derivedDraft({
+      procedural: {
+        schemaVersion: 2,
+        size: 8,
+        usage: 'normal',
+        layers: [{ op: 'noise', colorA: 0x202020, colorB: 0xe0e0e0, scale: 4, seed: 7 }],
+      },
+      derive: { kind: 'normal-from-height', strength: 3 },
+    }),
+  );
+  expect(record.manifest.maps[0]!.pixelHash).toBe(
+    'sha256:82ccc4035b46c5c224fe3ec50b4db8bdccda4f34cd7bb57ab9dac1c0dd2d2a74',
+  );
+  // The revision also covers the PNG encoder version, so only compiler identities are pinned.
+  expect(record.manifest.maps[0]!.recipe).toMatchObject({
+    recipeHash: 'sha256:30d6d7a740a6cc860148171b4ebce1288c09e0b9e95284936493df921e205578',
+  });
+});
+test('a V3 height source may stamp pits on a data usage before derivation', async () => {
+  const pits = {
+    op: 'stamps',
+    shape: { kind: 'ellipse', x: 0, y: 0, width: 3, height: 2 },
+    rgba: [40, 40, 40, 255],
+    count: 12,
+    seed: 11,
+    area: { x: 0, y: 0, width: 16, height: 16 },
+    periodic: true,
+  } as const;
+  const height = { ...structuredClone(heightSource), width: 16, height: 16, operations: [pits] };
+  const record = await createMaterialRecordV2(
+    derivedDraft({ procedural: height, derive: { kind: 'normal-from-height', strength: 4 } }),
+  );
+  const compiled = compileProceduralTextureSpecV3(height);
+  expect(new Set(compiled.pixels.filter((_, i) => i % 4 === 0))).toEqual(new Set([200, 40]));
+  await verifyMaterialRecord(record);
+  expect(() =>
+    compileProceduralTextureSpecV3({ ...height, palette: { colors: [0x808080] } }),
+  ).toThrow(/palette and dither are supported only for color usages/);
 });
