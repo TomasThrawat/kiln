@@ -79,6 +79,11 @@ does not publish a package.
   `schemaVersion:2` record; `createMaterialPresetDraftAny` returns any preset's draft, and
   preset summaries report `recordSchemaVersion`. The docs list the presets as a table that a
   test keeps in step with the catalog (#210).
+- Add a second set of material presets ([#221](https://github.com/instruktlabs/kiln/issues/221)).
+  `lime-plaster`, `oak`, `linen`, `jute`, `basalt`, `terracotta`, `wicker` and `brushed-brass`
+  follow the #210 contract: base colour, normal derived from height and packed metallic/roughness,
+  an explicit seed and licence, a stated repeat scale and a family tag. They are synthetic
+  starting points, not scans; the docs table and its test list them.
 - Name procedural texture usage errors and add `kiln validate` ([#215](https://github.com/instruktlabs/kiln/issues/215)).
   An unknown `proceduralTexture` usage (such as `data`) or a usage that does not match its
   portable material slot, in V2 or V3, now crosses the evaluator boundary as the closed
