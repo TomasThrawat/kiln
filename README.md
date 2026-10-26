@@ -52,15 +52,15 @@ Scene code and asset content retain their own licences; each pack records its sc
 
 ## Used in live games
 
-I build Sheepdog Sim, OBJEKT-62 and ski sim alongside Kiln, and use these games
+I build Sheepdog Sim, OBJEKT 62 and ski sim alongside Kiln, and use these games
 to test Kiln-authored assets in real gameplay.
 
-| Sheepdog Sim | OBJEKT-62 | ski sim |
+| Sheepdog Sim | OBJEKT 62 | ski sim |
 | --- | --- | --- |
 | [![The sheepdog facing a fenced pen, with the farmhouse, red barn and trees behind it](site/src/assets/live-games/sheepdog-sim.webp)](https://sheepdogsim.com/) | [![The survey rifle overlooking an outpost, with a monument on the distant horizon](site/src/assets/live-games/objekt62.webp)](https://objekt62.com/) | [![A skier grinding sideways beside a lit chalet, with pines, trail lights and a chairlift in the background](site/src/assets/live-games/ski-sim-village.webp)](https://skisim.app/) |
 
 Sheepdog Sim's [source](https://github.com/matthew-kissinger/sds) shows how its
-Kiln-authored buildings, fencing and trees fit into a working game. OBJEKT-62 uses
+Kiln-authored buildings, fencing and trees fit into a working game. OBJEKT 62 uses
 Kiln for weapons, vehicles and outpost modules; ski sim uses it for skiers,
 vegetation, village buildings and park equipment.
 
@@ -166,8 +166,11 @@ Read the [SDK guide](docs/sdk.md) for imports and host interfaces, and the
 [plugins](docs/install.md#local-claude-code-and-codex-plugins) use the same workspace
 setup. Other MCP clients can connect directly.
 
-[ChatGPT](docs/chatgpt.md) uses a separate remote-connection setup. A public hosted
-Kiln service and vendor directory listings are not available yet.
+[ChatGPT](docs/chatgpt.md) uses a separate remote-connection setup.
+[Hosted Kiln](https://kiln.instruktlabs.com/) is a remote MCP server at
+`https://kiln.instruktlabs.com/mcp`, open by invitation (see
+[Community and hosted access](#community-and-hosted-access)); it signs in through
+OAuth with Google or GitHub. Vendor directory listings are not available yet.
 
 ## Work on Kiln
 
