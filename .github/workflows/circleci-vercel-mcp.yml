@@ -56,9 +56,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/kiln-nextjs-cache
-          key: ${{ runner.os }}-nextjs-v2-${{ hashFiles('vercel-mcp/package-lock.json') }}
+          key: ${{ runner.os }}-nextjs-v2-${{ hashFiles('vercel-mcp/package-lock.json') }}-${{ hashFiles('vercel-mcp/app/**/*.ts', 'vercel-mcp/app/**/*.tsx', 'vercel-mcp/next.config.ts', 'vercel-mcp/tsconfig.json') }}
           restore-keys: |
-            ${{ runner.os }}-nextjs-v2-
+            ${{ runner.os }}-nextjs-v2-${{ hashFiles('vercel-mcp/package-lock.json') }}-
 
       - name: TypeScript validation
         run: npm run typecheck
