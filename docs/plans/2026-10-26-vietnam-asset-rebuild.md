@@ -426,9 +426,19 @@ was real — one of them alone cost a 13-minute rerun, and one nearly shipped.
   the expensive direction, but #5 shows a false red costs a cycle chasing nothing.
 - **Never infer success from absent failure lines.** Formats differ by runtime and by failure
   class.
+- **Do not match incidental lines against a remembered count.** One session reported 18
+  `✗ Tool failed` lines as benign; the next had 9, of two kinds rather than one. Both runs were
+  0 fail. The count is scope- and concurrency-dependent, so an expected number for it turns a
+  harmless artefact into a false signal — which is the very thing these rules exist to prevent.
+  Read the totals and the `(fail)` count; nothing else.
 - **Do not truncate the log you are going to read.** A `tail -22` preserved the totals and
   destroyed every `(fail)` line, leaving a correct total naming nothing. Capture whole, read the
   totals, grep the detail from the file.
+- **Pre-register the expected total, then check it.** State the number *before* the run, derived
+  from the merged tree, and treat a mismatch as a finding rather than a prompt to recount. A
+  post-hoc derivation can be unconsciously fitted to whatever the run produced, which is the
+  failure mode of every check above. Done properly on the third merge: 4,020 predicted, 4,020
+  observed.
 - **Cross-check the arithmetic.** The strongest verification found in this cycle is independent
   of exit codes, formats and failure lines: *the pass count should equal the known baseline plus
   the tests you added.* 3,987 + 6 = 3,993 passing proves no silent failure, because a masked
