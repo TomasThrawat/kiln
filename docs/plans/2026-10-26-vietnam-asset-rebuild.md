@@ -404,6 +404,56 @@ of seven is ready to implement.** Arguing against each:
 7. **`AGENTS.md` omits `build:sdk` — ready.** Verified by me, one line, no design content, no
    behaviour change. **The only item ready to implement as stated.**
 
+## Verifying a test run: five bad signals in one cycle
+
+Across one day of dogfooding, **five separate green-or-red signals were wrong**, each by a
+different mechanism. None was caught by the thing that produced it. Recorded because the cost
+was real — one of them alone cost a 13-minute rerun, and one nearly shipped.
+
+| # | Signal | Reality | Mechanism |
+| --- | --- | --- | --- |
+| 1 | wrapper reported `exit 0` | suite had failures | `echo "EXIT=$?"` after a pipe captured `tail`'s status, not the runner's |
+| 2 | `^not ok` grep matched nothing | suite had failures | Node 22 emits TAP, Node 24 emits spec — the grep pattern was for the other format |
+| 3 | failure-line grep returned 0 | summary said `1 fail` | the runner did not print the expected marker for that failure class |
+| 4 | background task "completed (exit code 0)" | log ended `1 fail` / `4 fail` | harness exit code simply wrong; hit independently by two sessions |
+| 5 | command reported `exit 1` | tests were **fine**, 11 pass / 0 fail | a `grep -c` appended to the pipeline exited non-zero on zero matches |
+
+**The rules that survived all five:**
+
+- **Read the summary totals out of the log.** It is the only reading that was right every time.
+- **A test-run exit code carries no information in either direction once anything is piped after
+  it.** A pipeline's status is its *last* command. Four of the five were false greens, which is
+  the expensive direction, but #5 shows a false red costs a cycle chasing nothing.
+- **Never infer success from absent failure lines.** Formats differ by runtime and by failure
+  class.
+- **Do not truncate the log you are going to read.** A `tail -22` preserved the totals and
+  destroyed every `(fail)` line, leaving a correct total naming nothing. Capture whole, read the
+  totals, grep the detail from the file.
+- **Cross-check the arithmetic.** The strongest verification found in this cycle is independent
+  of exit codes, formats and failure lines: *the pass count should equal the known baseline plus
+  the tests you added.* 3,987 + 6 = 3,993 passing proves no silent failure, because a masked
+  failure would read 3,992 pass / 1 fail.
+
+## Staleness in a derived artifact
+
+`dist/` is a build output committed in the same tree as its input, so it can silently disagree
+with the source beside it. Only `workspace-setup.test.ts` catches that.
+
+**The rule is stronger than "rebuild last after a rebase."** One session rebuilt the bundle, then
+made a cosmetic edit to a CLI help string, and that alone failed the test. So: **any source edit
+after a build leaves a lie in the tree**, including a typo fix, and rebase hygiene is only one
+instance of it.
+
+**The cheap check is idempotence**, and it needs no test suite:
+
+```
+git status --short    # empty
+node scripts/build-runtime.mjs all
+git status --short    # still empty  ->  the committed bundle matches its source
+```
+
+A two-second answer to "is this bundle stale", usable before every push.
+
 ## Open decisions
 
 - **D0 — how far to redesign.** "Better" needs a ceiling or P0 never ends. Proposal: one
