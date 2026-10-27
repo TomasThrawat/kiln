@@ -5,10 +5,10 @@ This subproject exposes Kiln's shared tool definitions over Streamable HTTP at `
 - The MCP tool registry comes from `kilnMcpToolDefs` in the published Kiln package.
 - Immutable source snapshots and asset revisions are kept in **private Vercel Blob storage**.
 - Source refs, saved asset file hashes, and GLB structure are verified when loaded.
-- `/api/health` checks storage and authentication configuration.
-- `KILN_MCP_API_KEY` is required: requests return 503 until configured and 401 for invalid credentials.
+- `/api/health` checks storage configuration and reports that authentication is not required.
+- `/api/mcp` is intentionally public and does not require an API key or bearer token. Blob objects remain private, but public callers can invoke the registered MCP tools, including tools that save assets and source snapshots into this project's Blob storage.
 
-Set the Vercel project root directory to `vercel-mcp`, use Node.js 22, connect a private Blob store, and set `KILN_MCP_API_KEY` in Vercel's secret variable UI. Connect with `Authorization: Bearer <key>`.
+Set the Vercel project root directory to `vercel-mcp`, use Node.js 22, and connect a private Blob store. Connect to `/api/mcp` directly without an `Authorization` header.
 
 This hosted adapter includes Kiln's shared authoring/render/inspect/edit/source and saved-asset tool definitions. Host-specific project storage, material-library management, local export-root operations and Live Review are not fully wired into the hosted adapter.
 

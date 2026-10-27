@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { get, list, put } from "@vercel/blob";
 import {
   ASSET_MATERIAL_FILE, assetIdSchema, assetManifestSchema, encodeAssetBundle,
@@ -188,17 +188,7 @@ const handler = createMcpHandler((server) => {
   }
 }, { serverInfo: { name: "kiln-vercel-mcp", version: "1.0.0" } });
 
-function authorize(request: Request): Response | undefined {
-  const expected = process.env.KILN_MCP_API_KEY;
-  if (!expected) return Response.json({ error: "MCP endpoint not configured. Set KILN_MCP_API_KEY." }, { status: 503 });
-  const authorization = request.headers.get("authorization") ?? "";
-  const supplied = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  const a = Buffer.from(expected), b = Buffer.from(supplied);
-  if (a.length === b.length && timingSafeEqual(a, b)) return undefined;
-  return Response.json({ error: "Unauthorized" }, { status: 401 });
-}
 async function dispatch(request: Request): Promise<Response> {
-  const denied = authorize(request);
-  return denied ?? handler(request);
+  return handler(request);
 }
 export { dispatch as GET, dispatch as POST };
