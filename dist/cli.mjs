@@ -260,6 +260,8 @@ function authoringDiagnosticAdvice(diagnostic) {
     return PROCEDURAL_TEXTURE_USAGE_ADVICE;
   if (diagnostic === "MATERIAL_FRACTION_RANGE")
     return MATERIAL_FRACTION_RANGE_ADVICE;
+  if (diagnostic === "MATERIAL_NAME")
+    return MATERIAL_NAME_ADVICE;
   if (diagnostic === "PROFILE_HOLES_UNSUPPORTED")
     return PROFILE_HOLES_UNSUPPORTED_ADVICE;
   if (diagnostic === "PROFILE_SOLID_FAILED")
@@ -268,13 +270,18 @@ function authoringDiagnosticAdvice(diagnostic) {
     return PROFILE_CORRESPONDENCE_COLLAPSE_ADVICE;
   return diagnostic === "PARAMETRIC_PERIODIC_ENDPOINT" ? PARAMETRIC_PERIODIC_ENDPOINT_ADVICE : "";
 }
+function assertMaterialName(name, fn) {
+  if (typeof name !== "string" || !name.length || name.length > MATERIAL_NAME_MAX_LENGTH || [...name].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127))
+    throw new AuthoringDiagnosticError("MATERIAL_NAME", `${fn}: name must be 1..${MATERIAL_NAME_MAX_LENGTH} visible characters, got ${typeof name === "string" ? JSON.stringify(name.slice(0, 32)) : typeof name}. ${MATERIAL_NAME_ADVICE}`);
+  return name;
+}
 function rethrowAuthoringError(error) {
   if (error instanceof ReferenceError && /(?: is not defined$|^Can't find variable: )/.test(error.message) && !/\b(?:loadTexture|process|fetch|globalThis|require|Bun|Deno)\b/.test(error.message)) {
     throw new AuthoringDiagnosticError("UNBOUND_VARIABLE");
   }
   throw error;
 }
-var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying. If it was meant to be a Kiln helper, call kiln_discover to confirm the exact name and signature; the sandbox exposes only those globals.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", PROCEDURAL_TEXTURE_UNKNOWN_KEY_ADVICE = 'Remove unsupported proceduralTexture fields. Call kiln_discover with ids ["proceduralTexture"] and use only the documented fields for the selected layer op.', PROCEDURAL_TEXTURE_USAGE_ADVICE = 'proceduralTexture usage is one of albedo (the default), emissive, normal, roughness, metalness, metallicRoughness or occlusion; there is no data or height usage. Match it to the slot it fills: portable material baseColor takes albedo, normal takes normal, metallicRoughness takes metallicRoughness (G roughness, B metalness), emissive takes emissive and occlusion takes occlusion; pbrMaterial albedo, normal, roughness, metalness, metallicRoughness, emissive and aoMap take the matching usage. Call kiln_discover with ids ["proceduralTexture"].', MATERIAL_FRACTION_RANGE_ADVICE = "Material fractions must be finite numbers between 0 and 1, inclusive. In proceduralTexture, mortarWidth and stagger are fractions, not pixels; opacity uses the same range. materialRecipe roughness, metalness, opacity, alphaCutoff and emissiveIntensity use 0..1. portableMaterial roughness, metalness and alphaCutoff also use 0..1; its emissiveIntensity has a separate 0..64 range. Call kiln_discover for the exact field contracts.", PARAMETRIC_PERIODIC_ENDPOINT_ADVICE = "Periodic parametricSurface endpoints must return matching positions. For periodicU, sample(uMin, v) and sample(uMax, v) must match; for periodicV, sample(u, vMin) and sample(u, vMax) must match.", PROFILE_HOLES_UNSUPPORTED_ADVICE = "loftProfiles and sweepProfile: holes are unsupported in options or sections. Use extrudeProfile for a holed cross-section with optional twist/taper; independently varying contours need explicit geometry or solid subtraction. cap:false does not create inner walls or thickness.", PROFILE_CORRESPONDENCE_COLLAPSE_ADVICE = "loftProfiles or sweepProfile: corresponding profile edges collapse between stations. Check matching start vertices and vertex order; for an intended twist, add intermediate sections or path stations. No automatic correspondence repair is applied. Other self-intersections remain unchecked.", PROFILE_SOLID_FAILED_ADVICE = 'PROFILE_SOLID_FAILED: extrudeProfile or revolveProfile could not build a solid from this outline. Reduce bevel or set it to 0. Keep the outline one simple closed loop: no self-intersections, repeated points or zero-length edges, and no neck narrower than twice the bevel. Holes must lie inside the outline and leave material. For revolveProfile, keep points off the axis (x = 0) unless the solid should close there. Keep coordinates at asset scale. Render that helper call alone with kiln_render and simplify the outline until it builds. Call kiln_discover with ids ["extrudeProfile", "revolveProfile"].', UNINITIALIZED_BINDING_ADVICE = "A const, let or class binding was read before its declaration ran (temporal dead zone). Move the declaration above the first code that reads it; top-level constants must be declared before other top-level code uses them. kiln_validate names the binding and line when the read runs immediately.", BUILD_RESULT_ADVICE = 'Define a top-level function build() (it may be async) that returns the root Object3D, for example const root = createRoot("Name"); ...; return root;. A build() that returns nothing, or returns a geometry or material, is rejected.', MATERIAL_RECIPE_OVERRIDE_ADVICE = 'materialRecipe takes a listed kiln.material.*.v1 ID and only the overrides that recipe allows; the allowed overrides differ by recipe (the emissive recipe has no metalness). Call kiln_discover with ids ["materialRecipe"] to see what each recipe allows; kiln_validate names the recipe and key when both are literals.', PROGRAM_TYPE_ERROR_ADVICE = "The program or a helper it called threw a TypeError: a value had the wrong type. Usually something is undefined (a function without a return, an un-awaited async helper such as roundedBoxGeo, extrudeProfile or materialRecipe, or a misspelt property) or a non-function was called. Run kiln_validate, then check the helper contract with kiln_discover.", PROGRAM_RANGE_ERROR_ADVICE = "The program or a helper it called threw a RangeError: a number was outside its allowed range, for example a non-positive size, an invalid array length or segment count, or unbounded recursion. Check the helper arguments against kiln_discover.", LOD_SET_ADVICE = 'Levels of detail: sibling nodes whose names share a stem and carry LOD0, LOD1, ... tokens (Body_LOD0, Body_LOD1) form one set. A set needs LOD0 and consecutive levels under one parent, outside any other tier, and one defineLod([lod0, lod1, ...], { screenCoverage: [...] }) call listing its tiers in level order with one value per level, each from 0 to 1 and strictly decreasing; the last may be 0, which never culls. Build one tier without LOD tokens unless the brief asks for levels. Call kiln_discover with ids ["defineLod"].', OPEN_SHELL_ADVICE = 'markOpenShell(part, reason) marks a part as intentionally open: part is the mesh createPart returned or a group whose meshes it covers, and reason is a non-empty string of at most 200 characters saying why, for example markOpenShell(rail, "C-channel closed by the end plates"). The engine owns the kilnOpenShell userData key; set it only through markOpenShell. Call kiln_discover with ids ["markOpenShell"].', DELIVERY_CONTRACT_ADVICE = 'Delivery helpers: colliderBox(size, { id }), colliderCapsule(radius, height, { id }) with height the total height of at least 2 * radius, colliderHull(mesh, { id }), anchor(kind, id), port(id) and defineModule(root, { footprint: [w, d], height, snapAxis: "x"|"y"|"z", origin: "corner"|"center" }). Ids and kinds are one segment of letters, digits, "_" or "-" with no dots; sizes are positive metres. The engine owns the kilnKit userData key; set it only through defineModule. defineBudget({ triangles: n | { LOD0, LOD1, ... }, draws?, images?, decodedBytes?, materialTier? }) takes positive integers for triangles and draws, non-negative integers for images and decodedBytes, and a reference tier such as "web.portable.v1/standard" for materialTier; definePalette(colors, { threshold? }) takes 1..64 hex colours. Call kiln_discover with ids ["colliderBox", "anchor", "defineModule", "defineBudget"].', REQUIRE_SOLID_ADVICE = 'REQUIRE_SOLID: a part marked with requireSolid(part) is not a closed, manifold, outward solid. Close every boundary (caps, end plates, a hull or a solid helper such as boxGeo or extrudeProfile), remove faces shared by three or more triangles, and keep one consistent outward winding; do not flip normals alone. Check the part with geometryDiagnostics(geometry).solid, or remove the requireSolid mark if the part is open on purpose. Call kiln_discover with ids ["requireSolid", "geometryDiagnostics"].', EXECUTION_REJECTED_ADVICE = "No message, stack or identifier crosses the sandbox: a thrown Error, a source-policy denial and any other failure are each reported only as this sentence. kiln_validate (CLI: kiln validate <program.js|ref>) checks syntax and static source rules such as policy denials; it cannot see execution-time failures, such as geometry a helper rejects while build() runs. Reproduce those with kiln_render, simplifying or removing the failing part until the program renders. To read values, render the program and call kiln_inspect (listParts, measurements) instead of throwing. A TypeError, RangeError, unbound variable, build() mistake or profile solid failure is named when it is the cause.", AuthoringDiagnosticError;
+var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying. If it was meant to be a Kiln helper, call kiln_discover to confirm the exact name and signature; the sandbox exposes only those globals.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", PROCEDURAL_TEXTURE_UNKNOWN_KEY_ADVICE = 'Remove unsupported proceduralTexture fields. Call kiln_discover with ids ["proceduralTexture"] and use only the documented fields for the selected layer op.', PROCEDURAL_TEXTURE_USAGE_ADVICE = 'proceduralTexture usage is one of albedo (the default), emissive, normal, roughness, metalness, metallicRoughness or occlusion; there is no data or height usage. Match it to the slot it fills: portable material baseColor takes albedo, normal takes normal, metallicRoughness takes metallicRoughness (G roughness, B metalness), emissive takes emissive and occlusion takes occlusion; pbrMaterial albedo, normal, roughness, metalness, metallicRoughness, emissive and aoMap take the matching usage. Call kiln_discover with ids ["proceduralTexture"].', MATERIAL_NAME_ADVICE = 'A material name is the key a destination runtime groups draws by, so it is 1 to 200 visible characters: a plain string, no control characters. gameMaterial, basicMaterial, glassMaterial and lambertMaterial take it in their options object, pbrMaterial and foliageMaterial in theirs, for example gameMaterial(0x25342a, { roughness: 0.58, name: "ParkerisedSteel" }). Omit it to leave the material unnamed; materialRecipe and the portable material specs name their output already.', MATERIAL_FRACTION_RANGE_ADVICE = "Material fractions must be finite numbers between 0 and 1, inclusive. In proceduralTexture, mortarWidth and stagger are fractions, not pixels; opacity uses the same range. materialRecipe roughness, metalness, opacity, alphaCutoff and emissiveIntensity use 0..1. portableMaterial roughness, metalness and alphaCutoff also use 0..1; its emissiveIntensity has a separate 0..64 range. Call kiln_discover for the exact field contracts.", PARAMETRIC_PERIODIC_ENDPOINT_ADVICE = "Periodic parametricSurface endpoints must return matching positions. For periodicU, sample(uMin, v) and sample(uMax, v) must match; for periodicV, sample(u, vMin) and sample(u, vMax) must match.", PROFILE_HOLES_UNSUPPORTED_ADVICE = "loftProfiles and sweepProfile: holes are unsupported in options or sections. Use extrudeProfile for a holed cross-section with optional twist/taper; independently varying contours need explicit geometry or solid subtraction. cap:false does not create inner walls or thickness.", PROFILE_CORRESPONDENCE_COLLAPSE_ADVICE = "loftProfiles or sweepProfile: corresponding profile edges collapse between stations. Check matching start vertices and vertex order; for an intended twist, add intermediate sections or path stations. No automatic correspondence repair is applied. Other self-intersections remain unchecked.", PROFILE_SOLID_FAILED_ADVICE = 'PROFILE_SOLID_FAILED: extrudeProfile or revolveProfile could not build a solid from this outline. Reduce bevel or set it to 0. Keep the outline one simple closed loop: no self-intersections, repeated points or zero-length edges, and no neck narrower than twice the bevel. Holes must lie inside the outline and leave material. For revolveProfile, keep points off the axis (x = 0) unless the solid should close there. Keep coordinates at asset scale. Render that helper call alone with kiln_render and simplify the outline until it builds. Call kiln_discover with ids ["extrudeProfile", "revolveProfile"].', UNINITIALIZED_BINDING_ADVICE = "A const, let or class binding was read before its declaration ran (temporal dead zone). Move the declaration above the first code that reads it; top-level constants must be declared before other top-level code uses them. kiln_validate names the binding and line when the read runs immediately.", BUILD_RESULT_ADVICE = 'Define a top-level function build() (it may be async) that returns the root Object3D, for example const root = createRoot("Name"); ...; return root;. A build() that returns nothing, or returns a geometry or material, is rejected.', MATERIAL_RECIPE_OVERRIDE_ADVICE = 'materialRecipe takes a listed kiln.material.*.v1 ID and only the overrides that recipe allows; the allowed overrides differ by recipe (the emissive recipe has no metalness). Call kiln_discover with ids ["materialRecipe"] to see what each recipe allows; kiln_validate names the recipe and key when both are literals.', PROGRAM_TYPE_ERROR_ADVICE = "The program or a helper it called threw a TypeError: a value had the wrong type. Usually something is undefined (a function without a return, an un-awaited async helper such as roundedBoxGeo, extrudeProfile or materialRecipe, or a misspelt property) or a non-function was called. Run kiln_validate, then check the helper contract with kiln_discover.", PROGRAM_RANGE_ERROR_ADVICE = "The program or a helper it called threw a RangeError: a number was outside its allowed range, for example a non-positive size, an invalid array length or segment count, or unbounded recursion. Check the helper arguments against kiln_discover.", LOD_SET_ADVICE = 'Levels of detail: sibling nodes whose names share a stem and carry LOD0, LOD1, ... tokens (Body_LOD0, Body_LOD1) form one set. A set needs LOD0 and consecutive levels under one parent, outside any other tier, and one defineLod([lod0, lod1, ...], { screenCoverage: [...] }) call listing its tiers in level order with one value per level, each from 0 to 1 and strictly decreasing; the last may be 0, which never culls. Build one tier without LOD tokens unless the brief asks for levels. Call kiln_discover with ids ["defineLod"].', OPEN_SHELL_ADVICE = 'markOpenShell(part, reason) marks a part as intentionally open: part is the mesh createPart returned or a group whose meshes it covers, and reason is a non-empty string of at most 200 characters saying why, for example markOpenShell(rail, "C-channel closed by the end plates"). The engine owns the kilnOpenShell userData key; set it only through markOpenShell. Call kiln_discover with ids ["markOpenShell"].', DELIVERY_CONTRACT_ADVICE = 'Delivery helpers: colliderBox(size, { id }), colliderCapsule(radius, height, { id }) with height the total height of at least 2 * radius, colliderHull(mesh, { id }), anchor(kind, id), port(id) and defineModule(root, { footprint: [w, d], height, snapAxis: "x"|"y"|"z", origin: "corner"|"center" }). Ids and kinds are one segment of letters, digits, "_" or "-" with no dots; sizes are positive metres. The engine owns the kilnKit userData key; set it only through defineModule. defineBudget({ triangles: n | { LOD0, LOD1, ... }, draws?, images?, decodedBytes?, materialTier? }) takes positive integers for triangles and draws, non-negative integers for images and decodedBytes, and a reference tier such as "web.portable.v1/standard" for materialTier; definePalette(colors, { threshold? }) takes 1..64 hex colours. Call kiln_discover with ids ["colliderBox", "anchor", "defineModule", "defineBudget"].', REQUIRE_SOLID_ADVICE = 'REQUIRE_SOLID: a part marked with requireSolid(part) is not a closed, manifold, outward solid. Close every boundary (caps, end plates, a hull or a solid helper such as boxGeo or extrudeProfile), remove faces shared by three or more triangles, and keep one consistent outward winding; do not flip normals alone. Check the part with geometryDiagnostics(geometry).solid, or remove the requireSolid mark if the part is open on purpose. Call kiln_discover with ids ["requireSolid", "geometryDiagnostics"].', EXECUTION_REJECTED_ADVICE = "No message, stack or identifier crosses the sandbox: a thrown Error, a source-policy denial and any other failure are each reported only as this sentence. kiln_validate (CLI: kiln validate <program.js|ref>) checks syntax and static source rules such as policy denials; it cannot see execution-time failures, such as geometry a helper rejects while build() runs. Reproduce those with kiln_render, simplifying or removing the failing part until the program renders. To read values, render the program and call kiln_inspect (listParts, measurements) instead of throwing. A TypeError, RangeError, unbound variable, build() mistake or profile solid failure is named when it is the cause.", AuthoringDiagnosticError, MATERIAL_NAME_MAX_LENGTH = 200;
 var init_authoring_diagnostic = __esm(() => {
   AuthoringDiagnosticError = class AuthoringDiagnosticError extends Error {
     diagnostic;
@@ -17836,6 +17843,8 @@ function pbrMaterial(opts = {}) {
     ...alphaMode === "mask" ? { alphaCutoff: mat.alphaTest } : {},
     doubleSided: opts.doubleSided === true
   };
+  if (opts.name !== undefined)
+    mat.name = assertMaterialName(opts.name, "pbrMaterial");
   return mat;
 }
 function foliageMaterial(albedo, opts = {}) {
@@ -17845,7 +17854,8 @@ function foliageMaterial(albedo, opts = {}) {
     metalness: 0,
     alphaMode: "mask",
     alphaCutoff: opts.alphaCutoff ?? 0.5,
-    doubleSided: opts.doubleSided ?? true
+    doubleSided: opts.doubleSided ?? true,
+    ...opts.name !== undefined ? { name: opts.name } : {}
   });
 }
 var init_textures = __esm(() => {
@@ -28839,7 +28849,7 @@ function requireColor(color, fn) {
 }
 function gameMaterial(color, options = {}) {
   requireColor(color, "gameMaterial");
-  return new THREE48.MeshStandardMaterial({
+  const material = new THREE48.MeshStandardMaterial({
     color,
     metalness: options.metalness ?? 0,
     roughness: options.roughness ?? 0.8,
@@ -28847,18 +28857,24 @@ function gameMaterial(color, options = {}) {
     emissiveIntensity: options.emissiveIntensity ?? 1,
     flatShading: options.flatShading ?? true
   });
+  if (options.name !== undefined)
+    material.name = assertMaterialName(options.name, "gameMaterial");
+  return material;
 }
 function basicMaterial(color, options = {}) {
   requireColor(color, "basicMaterial");
-  return new THREE48.MeshBasicMaterial({
+  const material = new THREE48.MeshBasicMaterial({
     color,
     transparent: options.transparent ?? false,
     opacity: options.opacity ?? 1
   });
+  if (options.name !== undefined)
+    material.name = assertMaterialName(options.name, "basicMaterial");
+  return material;
 }
 function glassMaterial(color, options = {}) {
   requireColor(color, "glassMaterial");
-  return new THREE48.MeshStandardMaterial({
+  const material = new THREE48.MeshStandardMaterial({
     color,
     transparent: true,
     opacity: options.opacity ?? 0.35,
@@ -28866,14 +28882,20 @@ function glassMaterial(color, options = {}) {
     metalness: options.metalness ?? 0,
     side: THREE48.DoubleSide
   });
+  if (options.name !== undefined)
+    material.name = assertMaterialName(options.name, "glassMaterial");
+  return material;
 }
 function lambertMaterial(color, options = {}) {
   requireColor(color, "lambertMaterial");
-  return new THREE48.MeshLambertMaterial({
+  const material = new THREE48.MeshLambertMaterial({
     color,
     flatShading: options.flatShading ?? true,
     emissive: options.emissive ?? 0
   });
+  if (options.name !== undefined)
+    material.name = assertMaterialName(options.name, "lambertMaterial");
+  return material;
 }
 function threeInterpolation(mode) {
   if (mode !== undefined && !TRACK_INTERPOLATIONS.includes(mode)) {
@@ -30258,7 +30280,7 @@ var init_geometry_catalog = __esm(() => {
 function listHelperSpecs() {
   return PRIMITIVES.map((p) => ({ ...p }));
 }
-var RECIPE_OVERRIDES_NOTE, PRIMITIVES;
+var MATERIAL_NAME_NOTE = "Set name to the authored finish when a destination runtime groups draws by material: it is written to the glTF material name, 1..200 visible characters. materialRecipe and the portable material specs name their output already.", RECIPE_OVERRIDES_NOTE, PRIMITIVES;
 var init_helper_specs = __esm(() => {
   init_geometry_catalog();
   init_material_recipes();
@@ -30787,11 +30809,12 @@ createPart('Blade', b, steel, { position: [0, 0, 0], parent: root });`
     },
     {
       name: "gameMaterial",
-      signature: "gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })",
+      signature: "gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading, name })",
       returns: "THREE.MeshStandardMaterial",
       category: "material",
       description: "PBR material with flat shading by default; choose shading and material settings for the intended surface.",
-      example: "const mat = gameMaterial(0x8b7355, { roughness: 0.9 });"
+      example: "const mat = gameMaterial(0x8b7355, { roughness: 0.9, name: 'OiledWalnut' });",
+      promptNotes: MATERIAL_NAME_NOTE
     },
     {
       name: "materialRecipe",
@@ -30822,7 +30845,7 @@ createPart('Blade', b, steel, { position: [0, 0, 0], parent: root });`
     },
     {
       name: "basicMaterial",
-      signature: "basicMaterial(color, opts?: { transparent, opacity })",
+      signature: "basicMaterial(color, opts?: { transparent, opacity, name })",
       returns: "THREE.MeshBasicMaterial",
       category: "material",
       description: "Unlit flat material. For UI / effects where lighting is baked in.",
@@ -30830,7 +30853,7 @@ createPart('Blade', b, steel, { position: [0, 0, 0], parent: root });`
     },
     {
       name: "glassMaterial",
-      signature: "glassMaterial(color, opts?: { opacity, roughness, metalness })",
+      signature: "glassMaterial(color, opts?: { opacity, roughness, metalness, name })",
       returns: "THREE.MeshStandardMaterial",
       category: "material",
       description: "Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.",
@@ -30838,7 +30861,7 @@ createPart('Blade', b, steel, { position: [0, 0, 0], parent: root });`
     },
     {
       name: "lambertMaterial",
-      signature: "lambertMaterial(color, opts?: { flatShading, emissive })",
+      signature: "lambertMaterial(color, opts?: { flatShading, emissive, name })",
       returns: "THREE.MeshLambertMaterial",
       category: "material",
       description: "Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.",
@@ -31163,16 +31186,17 @@ const mat = pbrMaterial({ albedo: bark, normal: normalMapFromHeight(bark, { stre
     },
     {
       name: "pbrMaterial",
-      signature: "pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, emissiveIntensity?, aoMap?, aoMapIntensity?, alphaMode?: 'opaque'|'mask'|'blend', alphaCutoff?, doubleSided? })",
+      signature: "pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, emissiveIntensity?, aoMap?, aoMapIntensity?, alphaMode?: 'opaque'|'mask'|'blend', alphaCutoff?, doubleSided?, name? })",
       returns: "THREE.MeshStandardMaterial",
       category: "material",
       description: "Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness, B=metalness); separate data maps are rejected instead of silently dropping a channel. alphaMode takes lowercase opaque/mask/blend and exports uppercase glTF modes. Supports double-sided output.",
       example: `const wood = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op: 'noise', colorA: 0x4f301c, colorB: 0x9a6b3e, scale: 8, octaves: 3, seed: 4 }] });
-const crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });`
+const crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0, name: 'CrateWood' });`,
+      promptNotes: MATERIAL_NAME_NOTE
     },
     {
       name: "foliageMaterial",
-      signature: "foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })",
+      signature: "foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided?, name? })",
       returns: "THREE.MeshStandardMaterial",
       category: "material",
       description: "Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and double-sided. Use an alpha-bearing albedo texture.",
@@ -44350,6 +44374,132 @@ var init_assets_node = __esm(() => {
   windowsSharePath = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/;
 });
 
+// src/texture-sharing.ts
+function readGlb(bytes) {
+  if (bytes.byteLength < 20)
+    throw new Error("Not a GLB: shorter than a GLB header");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== 1179937895)
+    throw new Error("Not a GLB: bad magic");
+  if (view.getUint32(4, true) !== 2)
+    throw new Error("Not a GLB: unsupported version");
+  if (view.getUint32(16, true) !== 1313821514)
+    throw new Error("Not a GLB: first chunk is not JSON");
+  const jsonEnd = 20 + view.getUint32(12, true);
+  if (jsonEnd > bytes.byteLength)
+    throw new Error("Invalid GLB chunk length");
+  const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, jsonEnd)));
+  if (!object3(json))
+    throw new Error("Invalid glTF asset");
+  if (jsonEnd + 8 > bytes.byteLength || view.getUint32(jsonEnd + 4, true) !== 5130562)
+    return { json };
+  const length = view.getUint32(jsonEnd, true);
+  if (jsonEnd + 8 + length > bytes.byteLength)
+    throw new Error("Invalid GLB chunk length");
+  return { json, binary: bytes.subarray(jsonEnd + 8, jsonEnd + 8 + length) };
+}
+function pixelSize(bytes) {
+  try {
+    return imageDimensions(bytes);
+  } catch {
+    return {};
+  }
+}
+function carriedImages(json, binary) {
+  const views = Array.isArray(json.bufferViews) ? json.bufferViews : [];
+  const carried = [];
+  for (const image of Array.isArray(json.images) ? json.images : []) {
+    if (!object3(image))
+      throw new Error("Invalid glTF image");
+    const view = index2(image.bufferView);
+    if (view !== undefined) {
+      const def = views[view];
+      if (!object3(def))
+        throw new Error("Invalid glTF image buffer view");
+      if ((index2(def.buffer) ?? 0) !== 0)
+        throw new Error("Image buffer view is not in this GLB binary chunk");
+      const offset = index2(def.byteOffset) ?? 0;
+      const length = index2(def.byteLength);
+      if (length === undefined || !binary || offset + length > binary.byteLength)
+        throw new Error("Invalid glTF image buffer view");
+      if (typeof image.mimeType !== "string")
+        throw new Error("Embedded image needs a mimeType");
+      carried.push({ bytes: binary.subarray(offset, offset + length), mimeType: image.mimeType });
+      continue;
+    }
+    const match = typeof image.uri === "string" ? DATA_URI.exec(image.uri) : null;
+    if (match)
+      carried.push({
+        bytes: Uint8Array.from(atob(match[2]), (character) => character.charCodeAt(0)),
+        mimeType: match[1]
+      });
+  }
+  return carried;
+}
+async function textureSharingReport(assets) {
+  const distinct = new Map;
+  const skipped = [];
+  let read = 0;
+  let assetBytes = 0;
+  let embeddedImages = 0;
+  let embeddedImageBytes = 0;
+  for (const asset of assets) {
+    let carried;
+    try {
+      const { json, binary } = readGlb(asset.bytes);
+      carried = carriedImages(json, binary);
+    } catch (error) {
+      skipped.push({ name: asset.name, reason: error.message });
+      continue;
+    }
+    read += 1;
+    assetBytes += asset.bytes.byteLength;
+    for (const image of carried) {
+      embeddedImages += 1;
+      embeddedImageBytes += image.bytes.byteLength;
+      const sha256 = `sha256:${await sha256Hex2(image.bytes)}`;
+      const entry = distinct.get(sha256);
+      if (entry) {
+        entry.copies += 1;
+        entry.assets.add(asset.name);
+      } else
+        distinct.set(sha256, {
+          bytes: image.bytes.byteLength,
+          mimeType: image.mimeType,
+          ...pixelSize(image.bytes),
+          copies: 1,
+          assets: new Set([asset.name])
+        });
+    }
+  }
+  const distinctImageBytes = [...distinct.values()].reduce((total, image) => total + image.bytes, 0);
+  const saving = (image) => image.bytes * (image.copies - 1);
+  return {
+    version: "kiln.texture-sharing.v1",
+    assets: read,
+    assetBytes,
+    embeddedImages,
+    distinctImages: distinct.size,
+    embeddedImageBytes,
+    distinctImageBytes,
+    duplicateImageBytes: embeddedImageBytes - distinctImageBytes,
+    images: [...distinct.entries()].sort(([sha, image], [otherSha, other]) => saving(other) - saving(image) || (sha < otherSha ? -1 : sha > otherSha ? 1 : 0)).map(([sha256, { bytes, mimeType, width, height, copies, assets: using }]) => ({
+      sha256,
+      bytes,
+      mimeType,
+      ...width !== undefined ? { width, height } : {},
+      copies,
+      assets: [...using].sort()
+    })),
+    skipped
+  };
+}
+var object3 = (value) => typeof value === "object" && value !== null, index2 = (value) => typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined, DATA_URI;
+var init_texture_sharing = __esm(() => {
+  init_runtime_textures();
+  DATA_URI = /^data:([^;,]+);base64,(.*)$/s;
+});
+
 // src/ktx2-basis.ts
 import { createHash as createHash17 } from "node:crypto";
 import { readFile as readFile8 } from "node:fs/promises";
@@ -44514,7 +44664,7 @@ function readGlbJson(bytes) {
   }
   const jsonEnd = 20 + view.getUint32(12, true);
   const json = JSON.parse(decoder.decode(bytes.subarray(20, jsonEnd)));
-  if (!object3(json) || !object3(json.asset) || json.asset.version !== "2.0")
+  if (!object4(json) || !object4(json.asset) || json.asset.version !== "2.0")
     throw new Error("Invalid glTF asset");
   return { json, jsonEnd };
 }
@@ -44584,7 +44734,7 @@ async function exportAssetGlb(record, options = {}) {
   }
   const { json, jsonEnd } = readGlbJson(bytes);
   const asset = json.asset;
-  if (owns(asset, "extras") && !object3(asset.extras))
+  if (owns(asset, "extras") && !object4(asset.extras))
     throw new Error("Cannot add provenance to non-object asset extras");
   const extras = asset.extras ?? {};
   if (owns(extras, "kilnProvenanceV1"))
@@ -44593,10 +44743,10 @@ async function exportAssetGlb(record, options = {}) {
   if (json.scenes !== undefined && !Array.isArray(json.scenes))
     throw new Error("Invalid glTF scenes");
   for (const [index, scene] of (json.scenes ?? []).entries()) {
-    if (!object3(scene) || !object3(scene.extras) || !owns(scene.extras, "kilnReviewClipsV1"))
+    if (!object4(scene) || !object4(scene.extras) || !owns(scene.extras, "kilnReviewClipsV1"))
       continue;
     const review = scene.extras.kilnReviewClipsV1;
-    if (!object3(review) || review.version !== 1 && review.version !== 2 || !Array.isArray(review.clips))
+    if (!object4(review) || review.version !== 1 && review.version !== 2 || !Array.isArray(review.clips))
       throw new Error("Unsupported scenes[].extras.kilnReviewClipsV1");
     scenes.push({ index, kilnReviewClipsV1: review });
     delete scene.extras.kilnReviewClipsV1;
@@ -44692,10 +44842,11 @@ async function externalLayout(gltf, manifest) {
       throw new Error(`Unexpected external glTF resource ${uri}`);
   return { json, buffers, textures: [...textures.values()] };
 }
-var encoder2, decoder, object3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value), owns = (value, key) => Object.hasOwn(value, key);
+var encoder2, decoder, object4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value), owns = (value, key) => Object.hasOwn(value, key);
 var init_asset_export = __esm(() => {
   init_assets();
   init_runtime_textures();
+  init_texture_sharing();
   encoder2 = new TextEncoder;
   decoder = new TextDecoder;
 });
@@ -56540,7 +56691,7 @@ async function assetMain(argv) {
     }
     if (arg === "--category" || arg.startsWith("--category="))
       throw new Error(CATEGORY_MIGRATION_MESSAGE);
-    if (arg === "--json" && command === "export") {
+    if (arg === "--json" && (command === "export" || command === "textures")) {
       flags.json = "true";
       continue;
     }
@@ -56842,6 +56993,50 @@ async function assetMain(argv) {
           }))
         }, null, 2));
     }
+  } else if (command === "textures") {
+    if (!positional.length)
+      throw new Error("textures requires a file or directory");
+    const { readdir } = await import("node:fs/promises");
+    const paths = [];
+    for (const path of positional) {
+      if ((await stat6(path)).isDirectory())
+        for (const entry of (await readdir(path)).sort()) {
+          if (entry.toLowerCase().endsWith(".glb"))
+            paths.push(resolve14(path, entry));
+        }
+      else
+        paths.push(resolve14(path));
+    }
+    if (paths.length > TEXTURE_REPORT_LIMIT)
+      throw new Error(`textures reads at most ${TEXTURE_REPORT_LIMIT} assets at once`);
+    const assets = [];
+    for (const path of paths)
+      assets.push({ name: basename2(path), bytes: await fileBytes(path) });
+    await Promise.resolve().then(() => init_texture_sharing());
+    const report = await textureSharingReport(assets);
+    if (flags.json)
+      console.log(JSON.stringify({ ok: true, ...report }, null, 2));
+    else {
+      const count = (value) => value.toLocaleString("en-US");
+      const share = report.assetBytes ? ` (${(100 * report.duplicateImageBytes / report.assetBytes).toFixed(1)}% of ${count(report.assetBytes)} delivered bytes)` : "";
+      console.log(`${count(report.assets)} assets · ${count(report.embeddedImages)} embedded images · ${count(report.distinctImages)} distinct · ${count(report.duplicateImageBytes)} duplicated bytes${share}`);
+      for (const { name, reason } of report.skipped)
+        console.log(`Skipped ${name}: ${reason}`);
+      if (!report.duplicateImageBytes)
+        console.log("Every image is carried once: nothing to share across this set.");
+      else {
+        console.log("Share each image once with --textures external, or name their identities for a host with --textures manifest (docs/export-profiles.md#runtime-textures-manifest-and-shared-files):");
+        const shared = report.images.filter((image) => image.copies > 1);
+        for (const image of shared.slice(0, 10)) {
+          const names = image.assets.slice(0, 3).join(", ");
+          const rest = image.assets.length - 3;
+          const size = image.width === undefined ? "" : `${image.width}x${image.height} `;
+          console.log(`  ${image.sha256.slice("sha256:".length, "sha256:".length + 12)} ${count(image.bytes)} B ${size}${image.mimeType} · ${image.copies} copies · saves ${count(image.bytes * (image.copies - 1))} B · ${names}${rest > 0 ? ` +${count(rest)} more` : ""}`);
+        }
+        if (shared.length > 10)
+          console.log(`  ... and ${count(shared.length - 10)} more shared images (--json for all)`);
+      }
+    }
   } else if (command === "import") {
     const file = positional[0];
     if (!file)
@@ -56903,7 +57098,7 @@ async function assetMain(argv) {
   }
   return 0;
 }
-var SAVE_LINES = `  kiln save <source.js|programRef> --name <name> [--collection project]
+var TEXTURE_REPORT_LIMIT = 1024, SAVE_LINES = `  kiln save <source.js|programRef> --name <name> [--collection project]
        [--asset <id> --parent <revision>] [--description <text>] [--tag <tag>]
        [--model <model>] [--harness <harness>] [--author <author>]  declared attribution
        [--backdrop neutral|dark|light]   preview backdrop; the one the reviewed sheet used
@@ -56966,6 +57161,11 @@ ${SAVE_LINES}
        [--json]   receipt naming each file with its bytes and sha256
        export never replaces an existing file: an export hands off one exact
        saved revision, while render --out replaces its own working output
+  kiln textures <file-or-directory>... [--json]
+       how many distinct images a delivered set carries against how many it ships,
+       and the bytes sharing them would save. The duplication is between assets,
+       never inside one, so point this at a whole delivery folder. Reads only:
+       it writes and rewrites nothing
   kiln import <asset.zip|asset.glb> [--collection project] [--name <name>]
                                           prints the directory of each imported revision
   kiln view [collection-directory|asset.glb|asset.zip] [--port 4318]
@@ -57379,7 +57579,7 @@ function applyJsonOption(argv) {
     throw new Error(JSON_OPTION_MESSAGE);
   return PRINTS_JSON.has(command ?? "") ? rest : argv;
 }
-var JSON_OPTION_MESSAGE = "--json prints a JSON receipt from render, source, export, discover, inspect, animation and service status|reprobe; edit, save, collections, assets, asset, import, project, material, review and migrate print JSON already and accept it. generate, view, collections add and service start|stop print no JSON.", PRINTS_JSON;
+var JSON_OPTION_MESSAGE = "--json prints a JSON receipt from render, source, export, textures, discover, inspect, animation and service status|reprobe; edit, save, collections, assets, asset, import, project, material, review and migrate print JSON already and accept it. generate, view, collections add and service start|stop print no JSON.", PRINTS_JSON;
 var init_cli_json = __esm(() => {
   PRINTS_JSON = new Set([
     "save",
@@ -59607,7 +59807,7 @@ async function runMain(argv) {
       return 1;
     }
   }
-  if (["save", "collections", "assets", "asset", "export", "import", "view"].includes(argv[0] ?? "")) {
+  if (["save", "collections", "assets", "asset", "export", "textures", "import", "view"].includes(argv[0] ?? "")) {
     try {
       return await (await Promise.resolve().then(() => (init_asset_cli(), exports_asset_cli))).assetMain(argv);
     } catch (error) {

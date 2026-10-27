@@ -7,6 +7,29 @@ does not publish a package.
 
 ## Unreleased
 
+- `kiln textures <files-or-folders> [--json]` reports the texture duplication a delivered
+  set ships: embedded image occurrences against distinct images, the bytes sharing would
+  save, and each distinct image's hash, size and the assets carrying it. The duplication
+  is between assets, never inside one -- measured over 160 assets in four real worlds,
+  within-asset duplicate images were 0 every time -- so a per-asset receipt count cannot
+  see it and the report is scoped to a set. It reads bytes and writes nothing, so exported
+  and canonical GLBs stay byte-identical; acting on it is the existing `--textures
+  external` or `--textures manifest` from
+  [#213](https://github.com/instruktlabs/kiln/issues/213). Library export:
+  `textureSharingReport` from `@instruktlabs/kiln/asset-export`
+  ([#287](https://github.com/instruktlabs/kiln/issues/287)).
+- Every material helper takes an optional `name`, written to the exported glTF
+  `materials[].name`: `gameMaterial`, `basicMaterial`, `glassMaterial` and
+  `lambertMaterial` in their options object, `pbrMaterial` and `foliageMaterial` in
+  theirs. Both exporters already carried a name that was set, and it survives the
+  sandbox, `dedup` and every optimize level; what was missing was any way for an
+  author to set one, so delivered assets arrived with unnamed materials and the
+  authored distinctions were lost. A name is 1..200 visible characters, matching the
+  portable material spec's own bound, and control characters are rejected. This gives
+  a destination runtime a stable authored key to group draws by, instead of hashing
+  material factors. `materialRecipe` and the portable material specs already named
+  their output and are unchanged
+  ([#288](https://github.com/instruktlabs/kiln/issues/288)).
 - `remapUVToAtlas` takes an optional `axes`. The default `uv` is unchanged and replaces
   both components, which silently destroys a per-vertex gradient carried in V — a foliage
   wind sway weight read as `uv-y` is the known case, and the asset still validates and
