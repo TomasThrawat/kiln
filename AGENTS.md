@@ -168,17 +168,12 @@ bun run test:render-service
 bun run test:coverage
 ```
 
-A fresh checkout has no `lib/`, so `bun run build:sdk` must run before `typecheck` and
-before any public-entrypoint test, in the full sequence above and in the fast loop below
-alike. Without it the self-referential `@instruktlabs/kiln/qa` and `/tools` imports fail
-with `TS2307: Cannot find module`: a missing build step, not a broken tree.
-
 `bun run build` only typechecks. After runtime changes, run `node scripts/build-runtime.mjs all`
 to rebuild `dist/`, its identity and SDK `lib/` before CLI/MCP dogfood and full gates.
 Use `bun run build:runtime` when viewer assets also changed.
 
-Fast loop, once `lib/` exists: nearest test file first, then
-`bun run typecheck && bun run lint && bun run test`.
+Fast loop: `bun run build:sdk` (a fresh checkout has no `lib/`: a missing build step, not
+a broken tree), nearest test file, then `bun run typecheck && bun run lint && bun run test`.
 The full offline gate adds `bun run test:coverage`, which emits `coverage/lcov.info` and
 enforces the line/function ratchet in `bunfig.toml`. Raise thresholds when practical; never
 lower them without a measured rationale. Live model tests are opt-in via `bun run test:live`.
