@@ -1,12 +1,12 @@
 name: Kiln remote MCP validation
 
-# CircleCI owns the push/PR triggers for this workflow. Leave native GitHub
-# execution manual so commits don't consume GitHub Actions minutes as well.
+# CircleCI owns push/PR triggers for this workflow. Keep native GitHub execution manual.
 on:
   workflow_dispatch:
 
 jobs:
   verify-vercel-mcp:
+    if: github.ref == 'refs/heads/circleci/vercel-mcp-ci'
     name: Typecheck, contract tests, production build
     runs-on: ubuntu-latest
     timeout-minutes: 20
