@@ -461,9 +461,17 @@ reconcile, which is the opposite of the ones most likely to be wrong. Minified, 
 machine-ordered text is exactly what git is most willing to merge and least able to merge
 correctly.
 
-**The handling is to refuse the merge for derived files rather than resolve it:** discard all of
-`dist/` to `origin/main`'s state, then regenerate from the merged source. Never inspect or fix a
-merged bundle; the question "did git interleave these correctly" has no useful answer.
+**The handling is to refuse the merge for derived files — and to do it _before_ merging, not
+after.** Restore `dist/` to the merge-base state and **commit that first**. The branch then
+carries zero delta on those files, so git has nothing to interleave and simply takes `main`'s
+bundles; the `build.json` conflict disappears for the same reason. Then merge, and rebuild from
+merged source last.
+
+The post-merge form — merge, then discard the result and regenerate — reaches the same end state
+but passes through a tree that *contains* the interleaved garbage and relies on remembering to
+throw it away. **One makes the failure unreachable; the other makes it recoverable.** Never
+inspect or fix a merged bundle either way: "did git interleave these correctly" has no useful
+answer.
 
 **The idempotence check is what catches it**, which is why it earns its place beyond staleness:
 
@@ -475,6 +483,33 @@ git status --short    # still clean  ->  committed bundle matches merged source
 
 A silently interleaved bundle fails that immediately, because regenerating from source produces
 something different from what the merge produced.
+
+## Generated is not the same as unverifiable
+
+The opposite mistake to the bundles, and it cost nothing only because it was caught before the
+third merge: **do not regenerate a snapshot to resolve a merge.**
+
+Running the snapshot test *without* `--update-snapshots` compares the committed snapshot against
+what the merged source actually generates. **Passing is proof the merge was correct.**
+Regenerating unconditionally overwrites the file so that it trivially matches — converting a
+verifiable state into an unverifiable one, and destroying the only evidence that the merge of the
+*source* was sound.
+
+So: merge, run the snapshot test **without** update, and regenerate only if it fails — treating
+that failure as something to understand rather than paper over.
+
+**The line between this and the bundles is not "generated output".** Both are generated. The
+difference is structure and an oracle:
+
+| | minified bundle | `.snap` |
+| --- | --- | --- |
+| shape | effectively one enormous line, no structure | line-oriented, stable ordering |
+| a bad merge is | textually plausible, semantically dead | a test failure |
+| detectable by reading | no | yes |
+| has a comparator | no — only regenerate-and-compare | yes, the test itself |
+
+Discard-and-rebuild is the only honest route for the first. For the second it is actively
+harmful.
 
 ## The conflict nobody guards
 
