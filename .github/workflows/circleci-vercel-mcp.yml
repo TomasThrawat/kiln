@@ -23,6 +23,7 @@ jobs:
         uses: actions/setup-node@v7.1.0
         with:
           node-version: "22"
+          package-manager-cache: false
 
       - name: Install adapter dependencies
         run: npm install --no-audit --no-fund --legacy-peer-deps --cache /tmp/kiln-mcp-npm-cache
@@ -42,6 +43,14 @@ jobs:
 
       - name: Adapter contract tests
         run: npm test
+        working-directory: vercel-mcp
+
+      - name: Verify restored Next.js cache
+        run: |
+          echo "Working directory: $(pwd)"
+          test -d .next/cache
+          echo "Cache directory contents:"
+          find .next/cache -mindepth 1 -maxdepth 2 -print | head -n 40
         working-directory: vercel-mcp
 
       - name: Next.js production build
