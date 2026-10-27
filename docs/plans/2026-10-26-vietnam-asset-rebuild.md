@@ -372,14 +372,21 @@ contract, and `images: 0` was rejected although zero is the honest cap for an un
 The owner asked for an adversarial pass on my own findings. It substantially revised them: **one
 of seven is ready to implement.** Arguing against each:
 
-1. **Floating-part QA — gap real, my analogy wrong, fix 3-5x bigger than implied.** I claimed
-   `CHAR_CONTACT_FLOATING` was the precedent to copy. It is not: it checks a *declared* contact
-   role against asset-local ground ("Ground contact {role} is {offset} m above asset-local
-   ground"), not part-to-part contact. No domain has part-to-part contact checking. Worse, the
-   obvious rule is unstateable: "every part must touch another" would flag P0's corrected sling
-   swivels, which hang free on purpose, as defects — a false positive worse than the miss it
-   prevents. A real fix needs an author-declared contact mechanism, as characters already have.
-   **Design work, not a patch. Do not hand this to an agent as a fix.**
+1. **Floating-part QA — WITHDRAWN, 26 October. The feature already exists.** I claimed nothing in
+   Kiln covers one part of a prop floating off another. That is false. **#220 shipped as
+   COMPLETED on 23 October**, and the changelog records it: parts that rest on an external support
+   can be declared, which turns "the floating-parts warning to an informational line, and its
+   connectivity observation becomes" advisory. `src/qa/geometry-relations.ts` exposes `contact`,
+   `clearance`, `penetration`, `containment`, `coverage`, `alignment`, `concentricity` and
+   `tolerance`. Open **#277** extends the same mechanism to neighbouring modules and states the
+   relationship explicitly.
+
+   **What survives is narrower**, now tracked as **#289**: why the existing warning did not report
+   the M16A1's front sight post 2 mm off its A-frame, with per-material welding hiding the
+   primitive inside a single part as the suspected cause. That needs a reproduction first.
+
+   I ranked this first on two readings without once checking the issue tracker or the changelog.
+
 2. **Shadow exclusion in draw diagnostics — weakest Tier 1 item, downgrade.** The docs already
    state it and P0 knew it, so the people who read docs are not misled. A receipt qualifier is
    cheap but low value.
