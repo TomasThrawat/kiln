@@ -193,6 +193,7 @@ const handler = createMcpHandler((server) => {
     "project/spectrum_gt/r_54e2d2fd417c4007b7dadd913bee0cf7",
     "project/solar_r8/r_4b426b2dd63c49b78db652caf9611d3d",
     "project/apex_start_gate/r_11e222db05644745ac69fde85240259d",
+    "project/a_2259b2be779b4c99aa4fbc11b6048809/r_4c32701702d74cd0999b853ed41f8fb4",
   ]);
   server.registerTool(
     "kiln_asset_download",
