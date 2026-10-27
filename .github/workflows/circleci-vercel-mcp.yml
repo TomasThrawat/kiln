@@ -53,6 +53,7 @@ jobs:
         run: mkdir -p /tmp/kiln-nextjs-cache
 
       - name: Cache Next.js build artifacts
+        id: next-cache
         uses: actions/cache@v4
         with:
           path: /tmp/kiln-nextjs-cache
@@ -69,6 +70,8 @@ jobs:
         working-directory: vercel-mcp
 
       - name: Link and verify Next.js build cache
+        env:
+          NEXT_CACHE_HIT: ${{ steps.next-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           mkdir -p .next
@@ -80,12 +83,17 @@ jobs:
           fi
           ln -s /tmp/kiln-nextjs-cache .next/cache
           test -d .next/cache
+          echo "Cache exact hit: ${NEXT_CACHE_HIT:-false}"
           echo "Cache target: $(readlink -f .next/cache)"
           CACHE_ENTRY="$(find -L .next/cache -mindepth 1 -print -quit)"
           if [ -n "${CACHE_ENTRY}" ]; then
             echo "First restored cache entry: ${CACHE_ENTRY}"
             find -L .next/cache -mindepth 1 -maxdepth 2 -print | head -n 40 || true
           else
+            if [ "${NEXT_CACHE_HIT:-false}" = "true" ]; then
+              echo "ERROR: cache action reported an exact hit but no cache entries were restored."
+              exit 1
+            fi
             echo "No previous cache entries; the production build will seed the cache."
           fi
         working-directory: vercel-mcp
