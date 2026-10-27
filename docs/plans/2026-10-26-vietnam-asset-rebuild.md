@@ -433,6 +433,9 @@ was real — one of them alone cost a 13-minute rerun, and one nearly shipped.
   of exit codes, formats and failure lines: *the pass count should equal the known baseline plus
   the tests you added.* 3,987 + 6 = 3,993 passing proves no silent failure, because a masked
   failure would read 3,992 pass / 1 fail.
+- **Read `Ran N tests` from the runner; never count source.** `test.each`, a `describe` loop and
+  a conditional `test` each break a source grep the same way. The runner's own count is the only
+  one that reflects what executed.
 - **But count instances, not declarations — a sixth way to be wrong.** Verifying another
   branch's expected count by grepping added `test(` lines returned 4 where the truth was 6: two
   of the tests sat inside `for (const exporter of ['legacy','three'])` and therefore ran twice.
@@ -440,6 +443,38 @@ was real — one of them alone cost a 13-minute rerun, and one nearly shipped.
   expectation look reasonable, which is the worst property an expectation can have. **Also
   re-derive the baseline when `main` moves** — each merge in this cycle shifted it (3,987 to
   3,996 to 4,002), and the check is only as good as the number it is checked against.
+
+## The worst merge hazard: generated output that does not conflict
+
+Found landing the second of four PRs, and it is more dangerous than the `CHANGELOG.md` one
+because **nothing announces it**.
+
+Merging `main` into a branch, of the five committed `dist/` bundles, only `dist/build.json`
+conflicted. **The four `.mjs` files auto-merged cleanly.** Git interleaved two different
+minified bundles into a file that is textually plausible and semantically meaningless, reported
+no conflict, and said nothing.
+
+> A conflict at least announces itself. A silent auto-merge of generated output does not.
+
+A conflict list is therefore not a hazard list: the files git flags are the ones it could not
+reconcile, which is the opposite of the ones most likely to be wrong. Minified, generated or
+machine-ordered text is exactly what git is most willing to merge and least able to merge
+correctly.
+
+**The handling is to refuse the merge for derived files rather than resolve it:** discard all of
+`dist/` to `origin/main`'s state, then regenerate from the merged source. Never inspect or fix a
+merged bundle; the question "did git interleave these correctly" has no useful answer.
+
+**The idempotence check is what catches it**, which is why it earns its place beyond staleness:
+
+```
+git status --short    # clean after the regenerate
+node scripts/build-runtime.mjs all
+git status --short    # still clean  ->  committed bundle matches merged source
+```
+
+A silently interleaved bundle fails that immediately, because regenerating from source produces
+something different from what the merge produced.
 
 ## The conflict nobody guards
 
