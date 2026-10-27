@@ -7,6 +7,7 @@ import {
 import { kilnMcpToolDefs } from "@instruktlabs/kiln/mcp";
 import { assertProgramRef, MAX_PROGRAM_BYTES, programNotFound, programReference, type ProgramStore } from "@instruktlabs/kiln/programs";
 import { createMcpHandler } from "mcp-handler";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -186,6 +187,55 @@ const handler = createMcpHandler((server) => {
       }
     });
   }
+
+  // Export the specific race assets created for this project; do not expose arbitrary private library blobs.
+  const downloadableRaceRevisions = new Set([
+    "project/spectrum_gt/r_54e2d2fd417c4007b7dadd913bee0cf7",
+    "project/solar_r8/r_4b426b2dd63c49b78db652caf9611d3d",
+    "project/apex_start_gate/r_11e222db05644745ac69fde85240259d",
+  ]);
+  server.registerTool(
+    "kiln_asset_download",
+    {
+      description: "Download the exact bytes of one of the saved racing assets as base64. Kiln verifies the saved file size and SHA-256 before returning it. Supports the original GLB model, saved PNG preview, or editable source; only the approved race asset revisions are exposed by this public endpoint.",
+      inputSchema: {
+        collection: z.enum(["project"]).default("project"),
+        assetId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
+        revisionId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
+        file: z.enum(["asset.glb", "preview.png", "source.kiln.js"]).default("asset.glb"),
+      },
+    },
+    async ({ collection, assetId, revisionId, file }) => {
+      try {
+        if (!downloadableRaceRevisions.has(`${collection}/${assetId}/${revisionId}`)) {
+          throw new Error("This asset revision is not enabled for public download.");
+        }
+        const record = await assetLibrary.read(collection, assetId, revisionId);
+        const bytes = record.files[file];
+        const metadata = record.manifest.files[file];
+        if (!bytes || !metadata) throw new Error(`Saved asset file not found: ${file}`);
+        if (bytes.byteLength !== metadata.bytes || digest(bytes) !== metadata.sha256) {
+          throw new Error("Saved asset integrity verification failed.");
+        }
+        const mimeType = file === "asset.glb" ? "model/gltf-binary" : file === "preview.png" ? "image/png" : "text/javascript";
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              ok: true, collection, assetId, revisionId, file, mimeType,
+              bytes: bytes.byteLength, sha256: metadata.sha256, encoding: "base64",
+              contentBase64: Buffer.from(bytes).toString("base64"),
+            }),
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ ok: false, error: error instanceof Error ? error.message : "Kiln asset download failed." }) }],
+          isError: true,
+        };
+      }
+    },
+  );
 }, { serverInfo: { name: "kiln-vercel-mcp", version: "1.0.0" } });
 
 async function dispatch(request: Request): Promise<Response> {
