@@ -1,0 +1,38 @@
+name: Kiln remote MCP validation
+
+# CircleCI owns the push/PR triggers for this workflow. Leave native GitHub
+# execution manual so commits don't consume GitHub Actions minutes as well.
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-vercel-mcp:
+    name: Typecheck, contract tests, production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install adapter dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: vercel-mcp
+
+      - name: TypeScript validation
+        run: npm run typecheck
+        working-directory: vercel-mcp
+
+      - name: Adapter contract tests
+        run: npm test
+        working-directory: vercel-mcp
+
+      - name: Next.js production build
+        run: npm run build
+        working-directory: vercel-mcp
