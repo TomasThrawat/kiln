@@ -406,8 +406,8 @@ of seven is ready to implement.** Arguing against each:
 
 ## The one rule: go to the artefact
 
-Six distinct false signals occurred in this cycle, and they look like six unrelated lessons until
-you line them up:
+Seven distinct false signals occurred in this cycle, and they look like seven unrelated lessons
+until you line them up:
 
 | what lied | what it described |
 | --- | --- |
@@ -417,6 +417,7 @@ you line them up:
 | a background task's "exit code 0" | a log ending `4 fail` |
 | a silently auto-merged `.mjs` | the bundle its source would produce |
 | GitHub's `mergeable: CONFLICTING` | a head that is a strict descendant of `main` |
+| `wc -m` agreeing with `wc -c` | a byte budget, by ASCII coincidence |
 
 **Every one is a derived or cached summary disagreeing with the artefact it describes.** And the
 remedy was the same every time: **go to the artefact.**
@@ -428,11 +429,25 @@ remedy was the same every time: **go to the artefact.**
 - Run the snapshot test, do not regenerate the snapshot.
 - Read `Ran N tests` from the runner, do not count `test(` in source.
 
-State it as one rule rather than six lessons, because the seventh variant has not been seen yet
+**The seventh variant is the sharpest, because it is currently telling the truth.**
+`AGENTS.md` is gated at `Buffer.byteLength(agents) < 12 * 1024`. On `main` the file is 100% ASCII
+— verified, zero non-ASCII bytes — so `wc -m` and `wc -c` both report **12284**. They agree
+*exactly*, and only because of what the file happens to contain.
+
+A character count is a summary of a byte count. This one is a summary that is correct today,
+**which is worse than one that is wrong**: a wrong summary gets caught, while a correct one
+trains you to trust the method. One em dash and they diverge by 2 while the editor keeps
+reporting the comfortable number, against a budget whose entire headroom is **3 bytes**.
+
+So the rule is not "derived summaries are unreliable". It is that a derived summary is a
+different thing from the artefact *even when the two agree*, and agreement today is not a
+property you can carry.
+
+State it as one rule rather than seven lessons, because the seventh variant has not been seen yet
 and a list of six will not cover it. The question to ask of any green light is: **is this the
 thing, or a summary of the thing?**
 
-## Verifying a test run: six bad signals in one cycle
+## Verifying a test run: seven bad signals in one cycle
 
 Across one day of dogfooding, **five separate green-or-red signals were wrong**, each by a
 different mechanism. None was caught by the thing that produced it. Recorded because the cost
