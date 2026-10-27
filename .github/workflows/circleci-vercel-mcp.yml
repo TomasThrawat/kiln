@@ -22,7 +22,7 @@ jobs:
           node-version: "22"
 
       - name: Install adapter dependencies
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        run: npm install --no-audit --no-fund --legacy-peer-deps --cache /tmp/kiln-mcp-npm-cache
         working-directory: vercel-mcp
 
       - name: TypeScript validation
