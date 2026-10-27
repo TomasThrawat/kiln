@@ -22,3 +22,12 @@ test("CircleCI validates adapter types, tests, and production build", async () =
   assert.match(config, /npm run build/);
   assert.doesNotMatch(config, /github\/workflows/);
 });
+
+test("MCP provides the exact saved race asset bytes as verified base64", async () => {
+  const route = await readFile(new URL("../app/api/mcp/route.ts", import.meta.url), "utf8");
+  assert.match(route, /server\.registerTool\(\s*"kiln_asset_download"/);
+  assert.match(route, /downloadableRaceRevisions/);
+  assert.match(route, /contentBase64: Buffer\.from\(bytes\)\.toString\("base64"\)/);
+  assert.match(route, /digest\(bytes\) !== metadata\.sha256/);
+  assert.match(route, /assetLibrary\.read\(collection, assetId, revisionId\)/);
+});
