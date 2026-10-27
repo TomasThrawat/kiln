@@ -404,7 +404,35 @@ of seven is ready to implement.** Arguing against each:
 7. **`AGENTS.md` omits `build:sdk` — ready.** Verified by me, one line, no design content, no
    behaviour change. **The only item ready to implement as stated.**
 
-## Verifying a test run: five bad signals in one cycle
+## The one rule: go to the artefact
+
+Six distinct false signals occurred in this cycle, and they look like six unrelated lessons until
+you line them up:
+
+| what lied | what it described |
+| --- | --- |
+| a wrapper's exit code | the test run |
+| a `^not ok` grep | the test run, under the other runtime's reporter |
+| a failure-line grep returning zero | a summary that said `1 fail` |
+| a background task's "exit code 0" | a log ending `4 fail` |
+| a silently auto-merged `.mjs` | the bundle its source would produce |
+| GitHub's `mergeable: CONFLICTING` | a head that is a strict descendant of `main` |
+
+**Every one is a derived or cached summary disagreeing with the artefact it describes.** And the
+remedy was the same every time: **go to the artefact.**
+
+- Read the log, not the exit code.
+- Regenerate the bundle, do not inspect it.
+- Ask git about ancestry (`git merge-base --is-ancestor origin/main HEAD`), not the API about
+  mergeability — a cached value computed mid-push reports garbage for a window afterwards.
+- Run the snapshot test, do not regenerate the snapshot.
+- Read `Ran N tests` from the runner, do not count `test(` in source.
+
+State it as one rule rather than six lessons, because the seventh variant has not been seen yet
+and a list of six will not cover it. The question to ask of any green light is: **is this the
+thing, or a summary of the thing?**
+
+## Verifying a test run: six bad signals in one cycle
 
 Across one day of dogfooding, **five separate green-or-red signals were wrong**, each by a
 different mechanism. None was caught by the thing that produced it. Recorded because the cost
