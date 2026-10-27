@@ -7,6 +7,17 @@ does not publish a package.
 
 ## Unreleased
 
+- `remapUVToAtlas` takes an optional `axes`. The default `uv` is unchanged and replaces
+  both components, which silently destroys a per-vertex gradient carried in V — a foliage
+  wind sway weight read as `uv-y` is the known case, and the asset still validates and
+  renders. `axes: 'u-only'` rescales U into the named region and passes V through
+  bit-for-bit, requiring `inputOrigin: 'top-left'` over a region spanning the full atlas
+  height, so a column sheet keeps the gradient while U can still be inset to texel
+  centers. A packed or vertically inset region is rejected rather than remapped. The
+  binding records `axes` only for `u-only`, so existing stamps and exported extras are
+  byte-identical. The helper contract, Discovery notes and authoring guidance now state
+  what replacing V costs ([#293](https://github.com/instruktlabs/kiln/issues/293)).
+
 ## 1.5.0 (2026-10-25)
 
 - Generated Codex workspaces forward `KILN_EXPORT_ROOT` to the MCP server, so
