@@ -9,7 +9,7 @@ test("Next.js MCP route is public while Blob objects remain private", async () =
   assert.match(route, /kilnMcpToolDefs/);
   assert.match(route, /access: "private"/);
   assert.doesNotMatch(route, /KILN_MCP_API_KEY|timingSafeEqual|Unauthorized|status: 503/);
-  assert.match(route, /return handler\(request\)/);
+  assert.ok(route.includes("return handler(request)"));
   const health = await readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8");
   assert.match(health, /authenticationRequired: false/);
   assert.ok(config.functions["app/api/mcp/route.ts"]);
