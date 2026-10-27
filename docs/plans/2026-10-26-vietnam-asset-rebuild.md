@@ -433,6 +433,33 @@ was real — one of them alone cost a 13-minute rerun, and one nearly shipped.
   of exit codes, formats and failure lines: *the pass count should equal the known baseline plus
   the tests you added.* 3,987 + 6 = 3,993 passing proves no silent failure, because a masked
   failure would read 3,992 pass / 1 fail.
+- **But count instances, not declarations — a sixth way to be wrong.** Verifying another
+  branch's expected count by grepping added `test(` lines returned 4 where the truth was 6: two
+  of the tests sat inside `for (const exporter of ['legacy','three'])` and therefore ran twice.
+  The grep looked authoritative and was off by two. A parameterised loop makes a wrong
+  expectation look reasonable, which is the worst property an expectation can have. **Also
+  re-derive the baseline when `main` moves** — each merge in this cycle shifted it (3,987 to
+  3,996 to 4,002), and the check is only as good as the number it is checked against.
+
+## The conflict nobody guards
+
+When several branches land in one cycle, their conflicts are not equally dangerous, and the
+ranking is the opposite of the intuitive one:
+
+| conflicted file | caught by |
+| --- | --- |
+| `dist/` bundles | `workspace-setup.test.ts`, plus the idempotent-rebuild check below |
+| generated snapshots | regeneration is authoritative; the test fails if stale |
+| **`CHANGELOG.md`** | **nothing** |
+
+Every branch in this cycle inserted at the same `## Unreleased` anchor, so the file conflicts
+every time. It is **neither regenerable nor covered by any test**, so a careless resolution
+silently drops one side's entry and no gate, total, snapshot or CI run will say so. The loss
+surfaces only when someone later asks why a shipped change is undocumented.
+
+So resolve it by keeping both entries, and **state in the report which entries survived**. That
+statement is the only check that exists. Raised by the session landing third, after two merges
+had already passed through the file unremarked — including by the session coordinating them.
 
 ## Staleness in a derived artifact
 
