@@ -17,6 +17,13 @@ does not publish a package.
   binding records `axes` only for `u-only`, so existing stamps and exported extras are
   byte-identical. The helper contract, Discovery notes and authoring guidance now state
   what replacing V costs ([#293](https://github.com/instruktlabs/kiln/issues/293)).
+- The floating-parts warning and the part-connectivity observation state their coverage:
+  both read the bounding boxes of drawn meshes at a 2 cm tolerance, so a smaller gap reads
+  as contact and primitives welded into one mesh are never compared with each other. The
+  QA integration reference says to measure millimetre contacts in the destination before
+  saving. Reproduced from a reported clean pass on a 2 mm detached part; the checks behaved
+  as specified and the tolerance, not welding, is what admitted it. No check changes
+  behaviour ([#289](https://github.com/instruktlabs/kiln/issues/289)).
 
 ## 1.5.0 (2026-10-25)
 
