@@ -70,6 +70,7 @@ jobs:
 
       - name: Link and verify Next.js build cache
         run: |
+          set -euo pipefail
           mkdir -p .next
           if [ -L .next/cache ]; then
             rm .next/cache
@@ -80,8 +81,10 @@ jobs:
           ln -s /tmp/kiln-nextjs-cache .next/cache
           test -d .next/cache
           echo "Cache target: $(readlink -f .next/cache)"
-          echo "Cache entries:"
-          find .next/cache -mindepth 1 -maxdepth 2 -print | head -n 40
+          CACHE_ENTRY="$(find -L .next/cache -mindepth 1 -print -quit)"
+          test -n "${CACHE_ENTRY}"
+          echo "First restored cache entry: ${CACHE_ENTRY}"
+          find -L .next/cache -mindepth 1 -maxdepth 2 -print | head -n 40 || true
         working-directory: vercel-mcp
 
       - name: Next.js production build
