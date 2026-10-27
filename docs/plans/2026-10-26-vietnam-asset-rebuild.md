@@ -484,6 +484,32 @@ git status --short    # still clean  ->  committed bundle matches merged source
 A silently interleaved bundle fails that immediately, because regenerating from source produces
 something different from what the merge produced.
 
+## Rehearse the merge first — it is free
+
+`git merge-tree --write-tree` computes a complete merge and writes **no refs, no commit, and
+nothing to the working tree**. `git status` is empty afterwards. So "what will actually conflict"
+is answerable before committing to anything, with no half-merged tree to extract yourself from.
+
+Measured on the third branch of this cycle, against a `main` that already carried the first:
+
+| | conflicts | silently auto-merged |
+| --- | --- | --- |
+| branch as it stood | `CHANGELOG.md`, `dist/build.json` | **`agent-run.mjs`, `cli.mjs`, `mcp-engine.mjs`** |
+| `dist/` restored to merge-base first | `CHANGELOG.md` only | **nothing — not one line** |
+
+That is the interleaving hazard reproduced independently on a second branch, and it turns the
+claim that the pre-merge revert "makes the failure unreachable" from an argument into a
+measurement: **three silent wrong interleavings and one conflict, removed.** With zero delta on
+the branch there is nothing for git to combine, so it takes `main`'s bundles outright.
+
+**Make it step 0 of any rebase in a multi-branch cycle**, with an explicit acceptance criterion
+so the rehearsal has a pass/fail rather than being a look around: *only `CHANGELOG.md` conflicts,
+and no `dist/` path appears at all.* Anything else means stop and understand it first.
+
+One limit worth stating: a dry run only exercises the overlaps that exist at the time. Files the
+other branch has not yet touched come back one-sided and trivial, and become two-sided only once
+it lands — so re-run the rehearsal after each merge rather than trusting an earlier result.
+
 ## Generated is not the same as unverifiable
 
 The opposite mistake to the bundles, and it cost nothing only because it was caught before the
