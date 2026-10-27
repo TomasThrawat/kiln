@@ -179,6 +179,40 @@ export async function recoverHolodeckStore({ out, only, mirror, selectionFile = 
 }
 
 /**
+ * Suggest the next free `<stem>-<NN>` after a release ID that is already spent, keeping the counter's width.
+ */
+export function nextHolodeckRelease(release, taken) {
+  const match = /^(.*)-(\d+)$/.exec(release);
+  if (!match) return undefined;
+  const [, stem, counter] = match;
+  for (let next = Number(counter) + 1; next < Number(counter) + 100; next++) {
+    const candidate = `${stem}-${String(next).padStart(counter.length, '0')}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * A release ID names one staged state. `releases.json` records every ID a release has spent and the selection it
+ * staged, so a branch cannot quietly reuse an ID another branch already spent on different content: #272 and #273
+ * both did, and five generated files had to be merged entry by entry afterwards. Restaging the same selection under
+ * the same ID is the normal release loop and changes nothing. An ID recorded without its selection was used before
+ * this ledger existed and cannot be reclaimed, because nothing can show it described the same content.
+ */
+export function claimHolodeckRelease({ release, selection, recorded }) {
+  const releases = new Map((recorded?.releases ?? []).map((record) => [record.release, record]));
+  const seal = { bytes: selection.length, sha256: hashBytes(selection) };
+  const prior = releases.get(release);
+  if (prior && !(prior.selection && sameObject(prior.selection, seal))) {
+    const free = nextHolodeckRelease(release, new Set(releases.keys()));
+    const held = prior.selection ? `a different selection (${prior.selection.sha256.slice(0, 12)})` : 'content this ledger did not record';
+    throw new Error(`Release ${release} already staged ${held}: choose a new HOLODECK_RELEASE${free ? `, such as ${free}` : ''}`);
+  }
+  releases.set(release, { release, selection: seal });
+  return { schemaVersion: 1, releases: [...releases.values()].sort((a, b) => a.release.localeCompare(b.release, 'en')) };
+}
+
+/**
  * Stage the selection, recovering any revision whose store is gone from its published bundle. The recovery workspace
  * is a throwaway copy of those revisions; the stores themselves stay read-only.
  */
@@ -190,8 +224,12 @@ export async function stageHolodeck(options) {
 
 async function stageSelection({ kiln, mirror, stores, selectionFile = join(PACKS_ROOT, 'selection.json'), site = SITE, packsRoot = PACKS_ROOT, exporter = runtimeExport, packs: packSpecs = HOLODECK_PACKS, presentations = HOLODECK_ASSETS, approved = holodeckApproved, fetchObject = fetchAssetObject }, recovery) {
   if (!kiln || !mirror || !stores) throw new Error('An explicit Kiln package, mirror and store set are required');
-  const selection = json(await readFile(selectionFile));
+  const selectionBytes = await readFile(selectionFile), selection = json(selectionBytes);
   if (selection.schemaVersion !== 1 || selection.licence !== 'CC0-1.0' || !/^[a-z0-9-]+$/.test(selection.release)) throw new Error('Invalid Holodeck selection');
+  const releaseFile = join(packsRoot, 'releases.json');
+  let recordedReleases;
+  try { recordedReleases = await readJson(releaseFile); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const releases = claimHolodeckRelease({ release: selection.release, selection: selectionBytes, recorded: recordedReleases });
   const kilnVersion = json(await readFile(join(kiln, 'package.json'))).version;
   const release = selection.release;
   const licence = holodeckLicence(), cc0 = await readFile(join(packsRoot, 'LICENSES/CC0-1.0.txt'));
@@ -335,6 +373,7 @@ async function stageSelection({ kiln, mirror, stores, selectionFile = join(PACKS
     packs, planned: HOLODECK_PLANNED, assets,
   };
   await writeJson(join(site, 'src/data/holodeck.json'), catalog);
+  await writeJson(releaseFile, releases);
   return { catalog, files: output.size, bytes: [...output.values()].reduce((sum, bytes) => sum + bytes.length, 0), recovered: recovery.revisions };
 }
 

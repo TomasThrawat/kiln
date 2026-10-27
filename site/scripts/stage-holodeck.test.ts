@@ -253,3 +253,19 @@ test('the recovery command rebuilds a store whose revisions are the stored bytes
   const again = await stageRelease(f, 'holodeck-fixture-01', COVE, { stores: { fixture: out } });
   expect(again.recovered).toEqual([]);
 });
+
+test('a release ID that already staged other content is refused, with the next free one', async () => {
+  const f = await fixture();
+  const ledger = join(f.packsRoot, 'releases.json');
+  await stageRelease(f, 'holodeck-fixture-01', COVE);
+  expect(JSON.parse(await readFile(ledger, 'utf8')).releases.map((record: any) => record.release)).toEqual(['holodeck-fixture-01']);
+  // Two packs staged in parallel both saw the same previous release and both chose the same next ID.
+  await expect(stageRelease(f, 'holodeck-fixture-01', { 'holodeck-cove': ['shell'] })).rejects.toThrow('holodeck-fixture-02');
+  // Restaging the same selection under the same ID is the normal release loop and adds nothing.
+  expect((await stageRelease(f, 'holodeck-fixture-01', COVE)).catalog.release).toBe('holodeck-fixture-01');
+  await stageRelease(f, 'holodeck-fixture-02', { 'holodeck-cove': ['shell'] });
+  expect(JSON.parse(await readFile(ledger, 'utf8')).releases.map((record: any) => record.release)).toEqual(['holodeck-fixture-01', 'holodeck-fixture-02']);
+  // An ID recorded as used but whose selection is unknown cannot be claimed either.
+  await put(ledger, JSON.stringify({ schemaVersion: 1, releases: [{ release: 'holodeck-fixture-03' }] }));
+  await expect(stageRelease(f, 'holodeck-fixture-03', COVE)).rejects.toThrow('holodeck-fixture-04');
+});

@@ -49,7 +49,11 @@ Kiln and Holodeck software keep their own licences.
   or revision makes its pack wait for review again.
 - `site/src/data/holodeck.json` is the gallery catalog. Downloads and posters are pinned in
   `site/src/data/mirror-manifest.json`; posters are rendered under the `review-neutral-v1` rig
-  and recorded in `site/src/data/rig-posters.json`.
+  and recorded in `site/src/data/rig-posters.json`, which keeps one record per poster run and
+  names the run on every poster it made.
+- `releases.json` records every release ID the packs have spent and the selection it staged, so
+  a branch cannot reuse an ID another branch already spent; see
+  [Choose a release ID](#choose-a-release-id).
 
 ## Regenerate
 
@@ -93,6 +97,34 @@ The bytes come from `--mirror` when a previous staging run still has them, and f
 host otherwise, but only for an object `published.json` records the host serving back. A
 revision never published, such as a brand-new one, still needs its store.
 
+### Choose a release ID
+
+A release ID names one staged state. `releases.json` records every ID spent and the SHA-256 of
+the `selection.json` it staged; staging refuses an ID already spent on different content and
+suggests the next free one. Restaging the same selection under the same ID is the normal release
+loop and records nothing new.
+
+Seven IDs were spent before this ledger existed, and only the current one is recorded with its
+selection: the rest were recovered from the release folders in the Holodeck poster paths, which
+show the ID was used but not what it staged. None of those can be claimed again.
+
+### Rebase a pack onto main
+
+`published.json`, `mirror-manifest.json`, `commons-build.json`, `holodeck.json` and
+`holodeck-shots.json` are generated. Merging two branches' copies line by line produces a state
+no staging run would produce — `holodeck-20261025-02` was spent twice and five files had to be
+reconciled entry by entry. Regenerate them instead:
+
+1. Take `main`'s copies of every generated file (`git checkout main -- <file>`), and `main`'s
+   `releases.json`.
+2. Give the pack a release ID that `releases.json` leaves free.
+3. Rerun the selection, staging and upload-list commands above. Staging rewrites the catalog,
+   the pins and the image plan from `selection.json`, so the result is one coherent state.
+
+`rig-posters.json` is the exception: its images need the GPU rig, so keep both branches' records
+and both runs, and re-render only the posters whose revision or model changed (`--only`).
+`refreshCatalog` then rewrites the catalog's posters from the record.
+
 ### Recover a lost store
 
 Materialise the selected revisions as a Kiln store again, from the same published bundles:
@@ -122,8 +154,9 @@ those out and names only new objects; one recorded with different bytes is refus
 
 For a new scene, keep the published selection as the baseline instead of reselecting
 older worlds. First add its real pack metadata, exact asset count and per-asset
-presentation to `holodeck-spec.mjs`, choose a new `HOLODECK_RELEASE`, and add its
-scene URL to `src/data/holodeck-worlds.json`. Do this only after the example and its
+presentation to `holodeck-spec.mjs`, choose a new `HOLODECK_RELEASE` that
+[`releases.json` leaves free](#choose-a-release-id), and add its scene URL to
+`src/data/holodeck-worlds.json`. Do this only after the example and its
 final assets exist. A selection does not approve an asset or publish its gallery page.
 
 From `site/`, append the committed example with its saved Kiln store:
@@ -154,7 +187,8 @@ revision approval records, and record any new asset review separately and honest
 ### Repoint a committed example
 
 When a selected example moves to a newer source revision, choose a new `HOLODECK_RELEASE`
-and repoint only that pack, from `site/`:
+that [`releases.json` leaves free](#choose-a-release-id) and repoint only that pack, from
+`site/`:
 
 ```sh
 node scripts/select-holodeck.mjs --repoint-example crescent-cove \
