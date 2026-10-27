@@ -23,7 +23,7 @@ function collectionId(value: string) {
 }
 async function readBytes(pathname: string): Promise<Uint8Array | undefined> {
   const result = await get(pathname, { access: "private" });
-  if (result.status !== "found") return undefined;
+  if (!result) return undefined;
   return new Uint8Array(await new Response(result.stream).arrayBuffer());
 }
 async function readText(pathname: string) {
@@ -70,7 +70,7 @@ class BlobAssetLibrary implements AssetLibrary {
     const paths: string[] = [];
     let cursor: string | undefined;
     do {
-      const page = await list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}), access: "private" });
+      const page = await list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
       for (const blob of page.blobs) if (blob.pathname.endsWith("/manifest.json")) paths.push(blob.pathname);
       cursor = page.cursor || undefined;
     } while (cursor);
