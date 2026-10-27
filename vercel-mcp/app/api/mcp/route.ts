@@ -199,6 +199,8 @@ const handler = createMcpHandler((server) => {
     "project/a_146530f65ea1472b8e4b26b3221ec674/r_a5f59ce76bb842a798f1d62469e0996c",
     "project/a_ab85ecc505614f70956d7b5a56a71681/r_16d131ec155346fc84147af0691b9cb8",
     "project/a_8597ec8eba124626bcd06ab19c06de78/r_0259ef376c54412aa204e6c4f7c6af3b",
+    "project/a_77a070a0389940f8b2d1b56a3011ea05/r_a3fd26e71fb3433fa810a2f54fb728b7",
+    "project/a_e7cc297b9fc54236b6c8f592069e9574/r_e474d44cd2544df396cec82509cbc7ec",
   ]);
   server.registerTool(
     "kiln_asset_download",
