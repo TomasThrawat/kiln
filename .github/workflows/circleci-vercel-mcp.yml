@@ -25,6 +25,14 @@ jobs:
         run: npm install --no-audit --no-fund --legacy-peer-deps --cache /tmp/kiln-mcp-npm-cache
         working-directory: vercel-mcp
 
+      - name: Cache Next.js build artifacts
+        uses: actions/cache@v4
+        with:
+          path: vercel-mcp/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('vercel-mcp/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-
+
       - name: TypeScript validation
         run: npm run typecheck
         working-directory: vercel-mcp
