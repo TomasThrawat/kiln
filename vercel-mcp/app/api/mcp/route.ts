@@ -194,6 +194,11 @@ const handler = createMcpHandler((server) => {
     "project/solar_r8/r_4b426b2dd63c49b78db652caf9611d3d",
     "project/apex_start_gate/r_11e222db05644745ac69fde85240259d",
     "project/a_2259b2be779b4c99aa4fbc11b6048809/r_4c32701702d74cd0999b853ed41f8fb4",
+    "project/a_ff228a8dfc9540aa86373ccaae11f519/r_b5662051544142ffa5ebe13a152a5f2c",
+    "project/a_aced1be383644a8189e44a56f94bdcd7/r_6b010d4298e54f3cb373bb3c78b7f8c5",
+    "project/a_146530f65ea1472b8e4b26b3221ec674/r_a5f59ce76bb842a798f1d62469e0996c",
+    "project/a_ab85ecc505614f70956d7b5a56a71681/r_16d131ec155346fc84147af0691b9cb8",
+    "project/a_8597ec8eba124626bcd06ab19c06de78/r_0259ef376c54412aa204e6c4f7c6af3b",
   ]);
   server.registerTool(
     "kiln_asset_download",
