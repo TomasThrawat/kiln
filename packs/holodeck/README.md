@@ -40,7 +40,9 @@ Kiln and Holodeck software keep their own licences.
 - `selection.json` freezes each pack's exact collection, asset and revision IDs and the
   SHA-256 of every saved manifest, source program and canonical GLB. Every placed scene GLB is
   byte-identical to the canonical `asset.glb` of the revision its world names.
-- `sources/project/<asset>/<revision>/` keeps each source program and saved manifest.
+- `sources/project/<asset>/<revision>/` keeps each source program and saved manifest. With the
+  published editable bundles these are enough to restage a pack whose Kiln store is gone, and to
+  rebuild that store; see [Restage without a store](#restage-without-a-store).
 - `HOLODECK_APPROVAL` in `site/scripts/holodeck-spec.mjs` records owner approval by slug and
   exact revision: on 2026-10-23 the 47 Tidemark, Courtyard and Cove cards, then Crescent Cove's
   41 new cards. A pack is available only when every asset it lists is approved, so a new card
@@ -65,6 +67,45 @@ node scripts/stage-holodeck.mjs --upload-list --mirror .localdata/holodeck-deliv
 A store is a workspace's `assets/kiln` directory. `KILN_PACKAGE_DIR` is an installed
 `@instruktlabs/kiln` package; its runtime export profile writes the runtime GLBs and metadata,
 and staging verifies they keep the canonical binary. Nothing here uploads anything.
+
+### Where stores live
+
+Keep every authoring workspace a release selects under one durable directory, one workspace per
+store name in `selection.json` — never in a session temp folder, and never only on the machine
+that authored it. A store named in the selection but kept nowhere else is a store that will be
+lost, and the names are the only thing a later release has to go on.
+
+Losing one is recoverable but not free: the published editable bundle is a fallback for
+restaging, not a substitute for the authoring workspace it came from.
+
+### Restage without a store
+
+A revision whose store is gone, or whose store no longer holds it, is read back from the
+editable bundle its release published. The bundle is a standard Kiln revision bundle, so its
+sealed members are the stored files byte for byte; the saved `manifest.json` comes from the
+`sources/` record here, because a bundle re-serialises it without the trailing newline a store
+writes. Both are verified against `selection.json`, the bundle must name the selected revision,
+and it must rebuild byte for byte into the very object it was read from — a content-addressed
+key would otherwise move silently rather than fail. Staging names every revision it read that
+way under `recovered`.
+
+The bytes come from `--mirror` when a previous staging run still has them, and from the asset
+host otherwise, but only for an object `published.json` records the host serving back. A
+revision never published, such as a brand-new one, still needs its store.
+
+### Recover a lost store
+
+Materialise the selected revisions as a Kiln store again, from the same published bundles:
+
+```sh
+node scripts/stage-holodeck.mjs --recover-store STORE_DIR --mirror .localdata/holodeck-delivery
+```
+
+`--only slug,slug` limits it to some assets. Each revision is written to
+`STORE_DIR/<assetId>/revisions/<revisionId>` exactly as its store held it, so one recovered
+directory can serve several store names; an existing file must already hold those bytes. The
+result is a store for restaging, not the authoring workspace: it holds the selected revisions
+only, with no history and no workspace state.
 
 Downloads are stored once, at content-addressed keys: `packs/holodeck/objects/<sha256>/<file>`,
 where the folder is the file's SHA-256 and the file keeps its readable name, such as
