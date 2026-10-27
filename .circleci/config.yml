@@ -1,0 +1,23 @@
+version: 2.1
+
+jobs:
+  verify-kiln-vercel-mcp:
+    docker:
+      - image: cimg/node:22.19
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: Install Vercel MCP adapter dependencies
+          command: cd vercel-mcp && npm install --no-audit --no-fund
+      - run:
+          name: TypeScript validation
+          command: cd vercel-mcp && npm run typecheck
+      - run:
+          name: Adapter contract tests
+          command: cd vercel-mcp && npm test
+
+workflows:
+  verify:
+    jobs:
+      - verify-kiln-vercel-mcp
