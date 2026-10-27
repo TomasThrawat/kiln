@@ -1,7 +1,10 @@
 {
   "functions": {
-    "api/mcp.ts": {
+    "app/api/mcp/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/health/route.ts": {
+      "maxDuration": 10
     }
   }
 }

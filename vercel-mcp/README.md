@@ -1,26 +1,15 @@
 # Kiln Remote MCP for Vercel
 
-This subproject exposes the published Kiln 1.5.0 tool registry over Streamable HTTP at `/api/mcp`. It leaves the upstream Kiln engine and the rest of this fork intact.
+This subproject exposes Kiln's shared tool definitions over Streamable HTTP at `/api/mcp` without modifying the original engine.
 
-## Capabilities
+- The MCP tool registry comes from `kilnMcpToolDefs` in the published Kiln package.
+- Immutable source snapshots and asset revisions are kept in **private Vercel Blob storage**.
+- Source refs, saved asset file hashes, and GLB structure are verified when loaded.
+- `/api/health` checks storage and authentication configuration.
+- `KILN_MCP_API_KEY` is required: requests return 503 until configured and 401 for invalid credentials.
 
-- Uses Kiln's shared MCP tool definitions rather than reimplementing tool schemas.
-- Stores immutable program source and saved asset revisions in **Vercel private Blob storage**.
-- Preserves source/GLB/preview bytes and validates file hashes and GLB structure when assets are read or imported.
-- Provides `/api/health` for a small deployment/storage configuration check.
-- Supports an optional bearer key through `KILN_MCP_API_KEY`. When it is unset, the MCP endpoint is public; only leave it unset if public write/render tools are intentional.
+Set the Vercel project root directory to `vercel-mcp`, use Node.js 22, connect a private Blob store, and set `KILN_MCP_API_KEY` in Vercel's secret variable UI. Connect with `Authorization: Bearer <key>`.
 
-The engine's optional project, material-library, and Live Review host adapters are not wired in this deployment; the standard geometry/render/edit/inspect/source and saved-asset tools are the intended initial surface.
+This hosted adapter includes Kiln's shared authoring/render/inspect/edit/source and saved-asset tool definitions. Host-specific project storage, material-library management, local export-root operations and Live Review are not fully wired into the hosted adapter.
 
-## Vercel
-
-Set the Vercel project Root Directory to `vercel-mcp` and use Node.js 22. Create a **private** Blob store connected to that project; Vercel supplies `BLOB_READ_WRITE_TOKEN` automatically. Do not make this store public: it holds user-authored source and asset data.
-
-- Health: `/api/health`
-- MCP: `/api/mcp`
-
-To require authentication, add `KILN_MCP_API_KEY` in the Vercel project's Production and Preview environments and send `Authorization: Bearer <key>`. Store keys only in the platform's secret-variable UI.
-
-## CircleCI
-
-The repository-level `.circleci/config.yml` runs the adapter's TypeScript checks and contract tests. Git integration may also create Vercel deployments on pushes; the CircleCI job is the CI gate, but this configuration does not itself promote a tested Vercel deployment.
+The root `.circleci/config.yml` runs TypeScript validation, contract tests, and a Next.js production build. CircleCI must have the GitHub App repository connection enabled for automatic runs.
