@@ -4,9 +4,11 @@ import {
   ASSET_MATERIAL_FILE, assetIdSchema, assetManifestSchema, encodeAssetBundle,
   validateRecordShape, type AssetDraft, type AssetLibrary, type AssetManifest, type AssetRecord,
 } from "@instruktlabs/kiln/assets";
-import { kilnMcpToolDefs } from "@instruktlabs/kiln/mcp";
+import { createKilnToolHost } from "@instruktlabs/kiln/mcp";
 import { assertProgramRef, MAX_PROGRAM_BYTES, programNotFound, programReference, type ProgramStore } from "@instruktlabs/kiln/programs";
 import { createMcpHandler } from "mcp-handler";
+import { ResourceTemplate } from "@modelcontextprotocol/server";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -167,9 +169,9 @@ class BlobAssetLibrary implements AssetLibrary {
 
 const programStore = new BlobProgramStore();
 const assetLibrary = new BlobAssetLibrary();
-const definitions = kilnMcpToolDefs({ programStore, assetLibrary });
 const handler = createMcpHandler((server) => {
-  for (const definition of definitions) {
+  const kilnHost = createKilnToolHost({ programStore, assetLibrary });
+  for (const definition of kilnHost.defs) {
     server.registerTool(definition.name, { description: definition.description, inputSchema: definition.inputSchema }, async (input) => {
       try {
         const result = await definition.run(input);
@@ -186,6 +188,73 @@ const handler = createMcpHandler((server) => {
       }
     });
   }
+
+  const readMcpResource = async (uri: URL) => {
+    const resource = await kilnHost.readResource(uri.href);
+    const metadata = { uri: resource.uri, mimeType: resource.mimeType };
+    if ("text" in resource) {
+      return { contents: [{ ...metadata, text: resource.text }] };
+    }
+    return { contents: [{ ...metadata, blob: resource.blob }] };
+  };
+
+  server.registerResource(
+    "kiln-asset-file",
+    new ResourceTemplate("kiln://assets/{collection}/{asset}/{revision}/{file}", { list: undefined }),
+    {
+      title: "Saved Kiln asset file",
+      description: "Read a verified original GLB, source, preview, manifest, editable bundle, or deterministic runtime export from a saved Kiln revision.",
+      mimeType: "application/octet-stream",
+    },
+    readMcpResource,
+  );
+
+  server.registerTool(
+    "kiln_read_resource",
+    {
+      title: "Read a saved Kiln resource",
+      description: "Read a kiln://assets resource when a client cannot call MCP resources/read. Binary files are returned as Base64 with MIME type, byte count, and SHA-256; text files are returned as text. The saved revision is read-only.",
+      inputSchema: z.object({ uri: z.string().min(1).max(4096) }),
+    },
+    async ({ uri }) => {
+      try {
+        const resource = await kilnHost.readResource(uri);
+        if ("blob" in resource) {
+          const bytes = Buffer.from(resource.blob, "base64");
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                uri: resource.uri,
+                mimeType: resource.mimeType,
+                sizeBytes: bytes.byteLength,
+                sha256: digest(bytes),
+                dataBase64: resource.blob,
+              }),
+            }],
+          };
+        }
+        const bytes = Buffer.from(resource.text, "utf8");
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              uri: resource.uri,
+              mimeType: resource.mimeType,
+              sizeBytes: bytes.byteLength,
+              sha256: digest(bytes),
+              text: resource.text,
+            }),
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: error instanceof Error ? error.message : "Kiln resource read failed." }],
+          isError: true,
+        };
+      }
+    },
+  );
 }, { serverInfo: { name: "kiln-vercel-mcp", version: "1.0.0" } });
 
 function authorize(request: Request): Response | undefined {
