@@ -1,14 +1,20 @@
 # Kiln Remote MCP for Vercel
 
-This subproject exposes Kiln's shared tool definitions over Streamable HTTP at `/api/mcp` without modifying the original engine.
+This subproject exposes Kiln's shared tool definitions over public Streamable HTTP at `/api/mcp`.
 
 - The MCP tool registry comes from `kilnMcpToolDefs` in the published Kiln package.
-- Immutable source snapshots and asset revisions are kept in **private Vercel Blob storage**.
+- **All registered MCP tools and resources are unauthenticated.** No API key or `Authorization` header is required.
+- Immutable source snapshots and asset revisions are stored in private Vercel Blob storage.
 - Source refs, saved asset file hashes, and GLB structure are verified when loaded.
-- `/api/health` checks storage and authentication configuration.
-- `KILN_MCP_API_KEY` is required: requests return 503 until configured and 401 for invalid credentials.
+- `/api/health` reports storage configuration and confirms that MCP authentication is not required.
 
-Set the Vercel project root directory to `vercel-mcp`, use Node.js 22, connect a private Blob store, and set `KILN_MCP_API_KEY` in Vercel's secret variable UI. Connect with `Authorization: Bearer <key>`.
+## Public access warning
+
+Anyone who knows or discovers the endpoint URL can call every registered Kiln MCP tool. This includes authoring, rendering, inspection, editing, source-program, and saved-asset operations exposed by the published tool registry. Those tools can read or change data in the shared private Blob store through this server.
+
+Do not store secrets, credentials, or content that must remain private in this Kiln instance. Public callers may consume compute, Blob operations, and data transfer associated with the Vercel project. The endpoint URL is not an access-control mechanism.
+
+Set the Vercel project root directory to `vercel-mcp`, use Node.js 22, and connect the private Blob store. No `KILN_MCP_API_KEY` variable is needed. Connect an MCP client directly to `https://<your-deployment>/api/mcp` without an authorization header.
 
 This hosted adapter includes Kiln's shared authoring/render/inspect/edit/source and saved-asset tool definitions. Host-specific project storage, material-library management, local export-root operations and Live Review are not fully wired into the hosted adapter.
 
