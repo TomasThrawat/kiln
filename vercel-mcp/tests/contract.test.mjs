@@ -9,6 +9,9 @@ test("Next.js MCP route exposes verified binary asset resources", async () => {
   assert.ok(route.includes("createKilnToolHost"));
   assert.ok(route.includes("kilnHost.defs"));
   assert.ok(route.includes('access: "private"'));
+  assert.ok(route.includes("result.statusCode !== 200"));
+  assert.ok(route.includes("if (!result || result.statusCode !== 200 || !result.stream)"));
+  assert.ok(route.includes("list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) })"));
   assert.ok(route.includes("KILN_MCP_API_KEY"));
   assert.ok(route.includes('new ResourceTemplate("kiln://assets/{collection}/{asset}/{revision}/{file}"'));
   assert.ok(route.includes("server.registerResource"));
