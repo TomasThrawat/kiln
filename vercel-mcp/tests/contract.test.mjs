@@ -25,6 +25,11 @@ test("Next.js MCP route exposes all registered tools and verified asset resource
   assert.ok(config.functions["app/api/mcp/route.ts"]);
 });
 
+test("Node engine range stays below an automatic major-version upgrade", async () => {
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(pkg.engines.node, ">=22.2.0 <25");
+});
+
 test("CircleCI validates adapter types, tests, and production build", async () => {
   const config = await readFile(new URL("../../.circleci/config.yml", import.meta.url), "utf8");
   assert.match(config, /npm run typecheck/);
