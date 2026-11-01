@@ -13,7 +13,7 @@ jobs:
           name: Install pinned Bun and npm
           command: |
             sudo npm install --global npm@12.2.0
-            sudo npm install --global bun@1.4.2
+            sudo npm install --global --allow-scripts=bun bun@1.4.2
             node --version
             npm --version
             bun --version
