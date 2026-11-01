@@ -89,6 +89,10 @@ jobs:
     working_directory: ~/project
     steps:
       - checkout
+      - restore_cache:
+          name: Restore Next.js build cache
+          keys:
+            - nextjs-build-v1-{{ checksum "vercel-mcp/package.json" }}-{{ checksum "vercel-mcp/next.config.ts" }}-{{ checksum "vercel-mcp/tsconfig.json" }}
       - run:
           name: Install adapter dependencies
           command: cd vercel-mcp && npm install --no-audit --no-fund
@@ -101,6 +105,11 @@ jobs:
       - run:
           name: Next.js production build
           command: cd vercel-mcp && npm run build
+      - save_cache:
+          name: Save Next.js build cache
+          key: nextjs-build-v1-{{ checksum "vercel-mcp/package.json" }}-{{ checksum "vercel-mcp/next.config.ts" }}-{{ checksum "vercel-mcp/tsconfig.json" }}
+          paths:
+            - vercel-mcp/.next/cache
 
 workflows:
   verify:
