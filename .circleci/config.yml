@@ -10,6 +10,9 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Prepare CI diagnostic logs
+          command: mkdir -p /tmp/kiln-ci-logs
+      - run:
           name: Install pinned Bun and npm
           command: |
             sudo npm install --global npm@12.2.0
@@ -41,7 +44,9 @@ jobs:
           no_output_timeout: 20m
       - run:
           name: Unit tests and coverage gate
-          command: bun run test:coverage
+          command: |
+            set -o pipefail
+            bun run test:coverage 2>&1 | tee /tmp/kiln-ci-logs/unit-tests-coverage.log
           no_output_timeout: 30m
       - run:
           name: Verify exporter worker and cache isolation
@@ -49,7 +54,9 @@ jobs:
           no_output_timeout: 20m
       - run:
           name: Engine regressions with community exporter
-          command: KILN_GLTF_EXPORTER=three bun run test
+          command: |
+            set -o pipefail
+            KILN_GLTF_EXPORTER=three bun run test 2>&1 | tee /tmp/kiln-ci-logs/engine-regressions-community-exporter.log
           no_output_timeout: 30m
       - run:
           name: Build runtime and viewer bundles
@@ -64,6 +71,9 @@ jobs:
             test "$#" -eq 1
             npm run test:package -- --tarball "$1"
           no_output_timeout: 30m
+      - store_artifacts:
+          path: /tmp/kiln-ci-logs
+          destination: kiln-engine-test-logs
 
   verify-kiln-render-service:
     docker:
