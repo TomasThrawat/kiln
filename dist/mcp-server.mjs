@@ -2047,6 +2047,13 @@ var mcp_manifest_default = {
             enum: [
               "three"
             ]
+          },
+          textures: {
+            description: "Runtime only: name each embedded image by sha256 in the sidecar, so a host can share images across assets. CLI --textures external writes them as separate files instead.",
+            type: "string",
+            enum: [
+              "manifest"
+            ]
           }
         },
         required: [
@@ -2155,7 +2162,7 @@ import { readFile } from "node:fs/promises";
 var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v6.html";
 
 // src/engine-identity.ts
-var ENGINE_VERSION = "1.5.0";
+var ENGINE_VERSION = "1.6.0";
 var ENGINE_INSTALL_URL = new URL("../", import.meta.url).href;
 
 // src/requirements-json.ts

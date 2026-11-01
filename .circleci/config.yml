@@ -1,9 +1,91 @@
 version: 2.1
 
 jobs:
+  verify-kiln-engine:
+    docker:
+      - image: cimg/node:22.23.3
+    working_directory: ~/project
+    environment:
+      KILN_RENDER: cpu
+    steps:
+      - checkout
+      - run:
+          name: Install pinned Bun and npm
+          command: |
+            sudo npm install --global npm@12.2.0
+            sudo npm install --global bun@1.4.2
+            node --version
+            npm --version
+            bun --version
+      - run:
+          name: Check toolchain metadata
+          command: bun run check:toolchain
+      - run:
+          name: Check skills
+          command: bun run check:skills
+      - run:
+          name: Install engine dependencies
+          command: bun install --frozen-lockfile
+      - run:
+          name: Build SDK
+          command: bun run build:sdk
+      - run:
+          name: TypeScript validation
+          command: bun run typecheck
+      - run:
+          name: Lint
+          command: bun run lint
+      - run:
+          name: Restore pinned regression inputs
+          command: node scripts/example-archive.mjs --fetch
+          no_output_timeout: 20m
+      - run:
+          name: Unit tests and coverage gate
+          command: bun run test:coverage
+          no_output_timeout: 30m
+      - run:
+          name: Verify exporter worker and cache isolation
+          command: node scripts/exporter-cli-check.mjs
+          no_output_timeout: 20m
+      - run:
+          name: Engine regressions with community exporter
+          command: KILN_GLTF_EXPORTER=three bun run test
+          no_output_timeout: 30m
+      - run:
+          name: Build runtime and viewer bundles
+          command: bun run build:runtime
+          no_output_timeout: 30m
+      - run:
+          name: Package and smoke-test the Node distribution
+          command: |
+            mkdir -p /tmp/kiln-candidate
+            npm pack --ignore-scripts --pack-destination /tmp/kiln-candidate
+            set -- /tmp/kiln-candidate/*.tgz
+            test "$#" -eq 1
+            npm run test:package -- --tarball "$1"
+          no_output_timeout: 30m
+
+  verify-kiln-render-service:
+    docker:
+      - image: cimg/node:22.23.3
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: Install pinned npm
+          command: sudo npm install --global npm@12.2.0
+      - run:
+          name: Install render-service dependencies without native build scripts
+          command: npm ci --ignore-scripts
+          working_directory: ~/project/render-service
+      - run:
+          name: Render-service tests
+          command: npm test
+          working_directory: ~/project/render-service
+
   verify-kiln-vercel-mcp:
     docker:
-      - image: cimg/node:22.19
+      - image: cimg/node:22.23.3
     working_directory: ~/project
     steps:
       - checkout
@@ -23,4 +105,6 @@ jobs:
 workflows:
   verify:
     jobs:
+      - verify-kiln-engine
+      - verify-kiln-render-service
       - verify-kiln-vercel-mcp
